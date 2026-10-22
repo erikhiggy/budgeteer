@@ -1,0 +1,39 @@
+/* Design tokens. Component CSS modules use only these variables; dark mode
+   (later) redefines them under prefers-color-scheme. */
+:root {
+  /* Neutrals */
+  --color-bg: #f7f7f5;
+  --color-surface: #ffffff;
+  --color-border: #e2e2dd;
+  --color-text: #1d1d1b;
+  --color-text-muted: #6b6b66;
+
+  /* Brand and semantics */
+  --color-accent: #2f6f4f;
+  --color-accent-contrast: #ffffff;
+  --color-outflow: #1d1d1b;
+  --color-inflow: #2f7d4f;
+  --color-over-cap: #c2412d;
+  --color-invalid: #c2412d;
+  --color-focus: #3b82c4;
+
+  /* Spacing (4px scale) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Type */
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --text-sm: 13px;
+  --text-md: 15px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+
+  /* Shape */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+}
