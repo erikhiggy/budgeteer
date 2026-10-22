@@ -3,7 +3,7 @@
 WEB := web
 BIN := bin/budgeteer
 
-.PHONY: dev dev-api dev-web build test test-go test-web clean
+.PHONY: dev dev-api dev-web build test test-go test-web fmt clean
 
 ## dev: run the Go API (./dev.db) and the Vite dev server together; open http://localhost:5173
 dev: $(WEB)/node_modules
@@ -28,8 +28,14 @@ test-go:
 	go test ./...
 
 test-web: $(WEB)/node_modules
+	npm --prefix $(WEB) run format:check
 	npm --prefix $(WEB) run typecheck
 	npm --prefix $(WEB) test
+
+## fmt: gofmt the Go code and Prettier the frontend
+fmt: $(WEB)/node_modules
+	gofmt -w cmd internal web/embed.go
+	npm --prefix $(WEB) run format
 
 clean:
 	rm -rf bin
