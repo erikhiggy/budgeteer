@@ -2,18 +2,27 @@
 
 WEB := web
 BIN := bin/budgeteer
+DEV_DB := ./dev.db
 
-.PHONY: dev dev-api dev-web build test test-go test-web fmt clean
+.PHONY: dev dev-api dev-web reset-dev build test test-go test-web fmt clean
 
-## dev: run the Go API (./dev.db) and the Vite dev server together; open http://localhost:5173
+## dev: run the Go API ($(DEV_DB)) and the Vite dev server together; open http://localhost:5173
 dev: $(WEB)/node_modules
 	$(MAKE) -j2 dev-api dev-web
 
 dev-api:
-	go run ./cmd/budgeteer --db ./dev.db
+	go run ./cmd/budgeteer --db $(DEV_DB)
 
 dev-web:
 	npm --prefix $(WEB) run dev
+
+## reset-dev: delete the dev database; the next `make dev` recreates it from the migrations
+reset-dev:
+	@if lsof -nP -iTCP:7420 -sTCP:LISTEN >/dev/null 2>&1; then \
+		echo "Something is listening on :7420. Stop \`make dev\` first, or the server keeps using the deleted file."; \
+		exit 1; \
+	fi
+	rm -f $(DEV_DB) $(DEV_DB)-shm $(DEV_DB)-wal
 
 ## build: build the frontend, then a single binary with it embedded
 build: $(WEB)/node_modules

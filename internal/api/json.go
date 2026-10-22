@@ -2,8 +2,12 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
+
+	"budgeteer/internal/store"
 )
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -16,4 +20,41 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// readJSON decodes a single JSON object from the request body into dst,
+// rejecting unknown fields so typos in field names fail loudly.
+func readJSON(w http.ResponseWriter, r *http.Request, dst any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		return fmt.Errorf("invalid JSON body: %v", err)
+	}
+	if dec.More() {
+		return errors.New("invalid JSON body: expected a single object")
+	}
+	return nil
+}
+
+// writeStoreError turns an error from package store into a response. Errors
+// of type *store.Error carry a user-facing message; anything else is logged
+// and reported as a 500 without details.
+func writeStoreError(w http.ResponseWriter, err error) {
+	var se *store.Error
+	if !errors.As(err, &se) {
+		log.Printf("internal error: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	status := http.StatusInternalServerError
+	switch se.Kind {
+	case store.NotFound:
+		status = http.StatusNotFound
+	case store.Conflict:
+		status = http.StatusConflict
+	case store.Invalid:
+		status = http.StatusBadRequest
+	}
+	writeError(w, status, se.Msg)
 }

@@ -17,7 +17,7 @@ func openTemp(t *testing.T) *sql.DB {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	db, err := Open(context.Background(), path)
+	db, err := open(context.Background(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,6 +51,17 @@ func TestOpenSetsPragmas(t *testing.T) {
 	}
 	if mode != "wal" {
 		t.Errorf("journal_mode = %q, want wal", mode)
+	}
+}
+
+func TestEmbeddedMigrationsApply(t *testing.T) {
+	db, err := Open(context.Background(), filepath.Join(t.TempDir(), "app.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if v := userVersion(t, db); v < 1 {
+		t.Errorf("user_version = %d, want >= 1", v)
 	}
 }
 

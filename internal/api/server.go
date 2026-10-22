@@ -8,12 +8,21 @@ import (
 	"net"
 	"net/http"
 	"strings"
+
+	"budgeteer/internal/store"
 )
+
+// handlers holds what the API handlers need. Each entity's handlers live in
+// their own file (accounts.go, …) as methods on this type.
+type handlers struct {
+	store *store.Store
+}
 
 // New returns the app's root handler. dist is the built frontend (the
 // contents of web/dist); it may lack index.html when the frontend hasn't
 // been built, e.g. during Vite-based development.
 func New(db *sql.DB, dist fs.FS) http.Handler {
+	h := &handlers{store: store.New(db)}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
@@ -23,6 +32,16 @@ func New(db *sql.DB, dist fs.FS) http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+
+	mux.HandleFunc("GET /api/accounts", h.listAccounts)
+	mux.HandleFunc("POST /api/accounts", h.createAccount)
+
+	// TODO(M1): categories and transactions. The contract the frontend
+	// expects is in docs/api.md.
+	//   GET  /api/categories
+	//   POST /api/categories
+	//   GET  /api/transactions?account_id=&from=&to=
+	//   POST /api/transactions
 
 	// Keep unknown API paths from falling through to the frontend.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

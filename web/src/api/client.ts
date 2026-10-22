@@ -1,0 +1,89 @@
+import type {
+	Account,
+	AccountInput,
+	Category,
+	CategoryInput,
+	DateRange,
+	Transaction,
+	TransactionInput,
+} from './types';
+
+/** A non-2xx response. `message` is the server's user-facing error text. */
+export class ApiError extends Error {
+	readonly status: number;
+
+	constructor(status: number, message: string) {
+		super(message);
+		this.name = 'ApiError';
+		this.status = status;
+	}
+}
+
+async function request<T>(
+	method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+	path: string,
+	body?: unknown,
+): Promise<T> {
+	const init: RequestInit = { method };
+	if (method !== 'GET') {
+		// The server rejects mutations without this header (see guard in
+		// internal/api/server.go), even when there's no body.
+		init.headers = { 'Content-Type': 'application/json' };
+		if (body !== undefined) init.body = JSON.stringify(body);
+	}
+
+	const res = await fetch(path, init);
+	const text = await res.text();
+	const data: unknown = text ? safeParse(text) : undefined;
+
+	if (!res.ok) {
+		const message = isErrorBody(data)
+			? data.error
+			: `${res.status} ${res.statusText}`.trim();
+		throw new ApiError(res.status, message);
+	}
+	return data as T;
+}
+
+function safeParse(text: string): unknown {
+	try {
+		return JSON.parse(text);
+	} catch {
+		return undefined;
+	}
+}
+
+function isErrorBody(v: unknown): v is { error: string } {
+	return (
+		typeof v === 'object' &&
+		v !== null &&
+		typeof (v as { error?: unknown }).error === 'string'
+	);
+}
+
+function query(params: Record<string, string | number | undefined>): string {
+	const q = new URLSearchParams();
+	for (const [k, v] of Object.entries(params)) {
+		if (v !== undefined && v !== '') q.set(k, String(v));
+	}
+	const s = q.toString();
+	return s ? `?${s}` : '';
+}
+
+export const api = {
+	listAccounts: () => request<Account[]>('GET', '/api/accounts'),
+	createAccount: (input: AccountInput) =>
+		request<Account>('POST', '/api/accounts', input),
+
+	listCategories: () => request<Category[]>('GET', '/api/categories'),
+	createCategory: (input: CategoryInput) =>
+		request<Category>('POST', '/api/categories', input),
+
+	listTransactions: (accountId: number, range: DateRange = {}) =>
+		request<Transaction[]>(
+			'GET',
+			`/api/transactions${query({ account_id: accountId, ...range })}`,
+		),
+	createTransaction: (input: TransactionInput) =>
+		request<Transaction>('POST', '/api/transactions', input),
+};
