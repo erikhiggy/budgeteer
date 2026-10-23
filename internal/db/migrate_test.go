@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -147,5 +148,66 @@ func TestMigrateRejectsNewerDatabase(t *testing.T) {
 	err := Migrate(context.Background(), db, fstest.MapFS{"0001_a.sql": {}})
 	if err == nil || !strings.Contains(err.Error(), "newer build") {
 		t.Errorf("err = %v, want newer-build error", err)
+	}
+}
+
+func TestTransfersMigrationKeepsExistingData(t *testing.T) {
+	db := openTemp(t)
+	ctx := context.Background()
+	migrations, err := fs.Sub(embedded, "migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	only := func(names ...string) fstest.MapFS {
+		m := fstest.MapFS{}
+		for _, name := range names {
+			data, err := fs.ReadFile(migrations, name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			m[name] = &fstest.MapFile{Data: data}
+		}
+		return m
+	}
+
+	// A database from before M3, with a transaction in it.
+	if err := Migrate(ctx, db, only("0001_init.sql")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO accounts (name, type) VALUES ('Checking', 'checking'), ('Savings', 'savings')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO transactions (account_id, date, amount_cents) VALUES (1, '2026-10-01', -500)`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Migrate(ctx, db, only("0001_init.sql", "0002_transfers.sql")); err != nil {
+		t.Fatal(err)
+	}
+	var amount int
+	var transferID sql.NullInt64
+	if err := db.QueryRow(`SELECT amount_cents, transfer_id FROM transactions`).Scan(&amount, &transferID); err != nil {
+		t.Fatal(err)
+	}
+	if amount != -500 || transferID.Valid {
+		t.Errorf("existing row = %d, %v; want -500 with no transfer", amount, transferID)
+	}
+
+	// Deleting a transfer deletes both legs.
+	if _, err := db.Exec(`INSERT INTO transfers (id) VALUES (1)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO transactions (account_id, date, amount_cents, transfer_id) VALUES (1, '2026-10-02', -100, 1), (2, '2026-10-02', 100, 1)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`DELETE FROM transfers WHERE id = 1`); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM transactions`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Errorf("%d transactions after deleting the transfer, want 1", n)
 	}
 }

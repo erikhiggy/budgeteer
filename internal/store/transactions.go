@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -14,6 +16,33 @@ type Transaction struct {
 	Payee       string `json:"payee"`
 	AmountCents int64  `json:"amount_cents"`
 	Note        string `json:"note"`
+	// Set on both legs of a transfer; nil on ordinary transactions.
+	TransferID        *int64 `json:"transfer_id"`
+	TransferAccountID *int64 `json:"transfer_account_id"` // the other leg's account
+}
+
+// transactionColumns selects a Transaction from transactions t, joined to the
+// other leg o of its transfer (if any). Scan it with scanTransaction.
+const transactionColumns = `
+	t.id, t.account_id, t.category_id, t.date, t.payee, t.amount_cents, t.note,
+	t.transfer_id, o.account_id
+	FROM transactions t
+	LEFT JOIN transactions o ON o.transfer_id = t.transfer_id AND o.id <> t.id`
+
+func scanTransaction(row interface{ Scan(...any) error }) (Transaction, error) {
+	var t Transaction
+	err := row.Scan(&t.ID, &t.AccountID, &t.CategoryID, &t.Date, &t.Payee, &t.AmountCents, &t.Note,
+		&t.TransferID, &t.TransferAccountID)
+	return t, err
+}
+
+// getTransaction returns the transaction with id, or a NotFound error.
+func (s *Store) getTransaction(ctx context.Context, id int64) (Transaction, error) {
+	t, err := scanTransaction(s.db.QueryRowContext(ctx, `SELECT `+transactionColumns+` WHERE t.id = ?`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Transaction{}, errorf(NotFound, "no transaction with id %d", id)
+	}
+	return t, err
 }
 
 type TransactionInput struct {
@@ -44,22 +73,21 @@ func (s *Store) ListTransactions(ctx context.Context, f TransactionFilter) ([]Tr
 		return nil, errorf(NotFound, "no account with id %d", f.AccountID)
 	}
 
-	where := []string{"account_id = ?"}
+	where := []string{"t.account_id = ?"}
 	args := []any{f.AccountID}
 	if f.From != "" {
-		where = append(where, "date >= ?")
+		where = append(where, "t.date >= ?")
 		args = append(args, f.From)
 	}
 	if f.To != "" {
-		where = append(where, "date <= ?")
+		where = append(where, "t.date <= ?")
 		args = append(args, f.To)
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, account_id, category_id, date, payee, amount_cents, note
-		FROM transactions
+		SELECT `+transactionColumns+`
 		WHERE `+strings.Join(where, " AND ")+`
-		ORDER BY date DESC, id DESC`, args...)
+		ORDER BY t.date DESC, t.id DESC`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -67,8 +95,8 @@ func (s *Store) ListTransactions(ctx context.Context, f TransactionFilter) ([]Tr
 
 	transactions := []Transaction{} // non-nil so it encodes as [] rather than null
 	for rows.Next() {
-		var t Transaction
-		if err := rows.Scan(&t.ID, &t.AccountID, &t.CategoryID, &t.Date, &t.Payee, &t.AmountCents, &t.Note); err != nil {
+		t, err := scanTransaction(rows)
+		if err != nil {
 			return nil, err
 		}
 		transactions = append(transactions, t)
@@ -106,14 +134,15 @@ func (s *Store) CreateTransaction(ctx context.Context, in TransactionInput) (Tra
 
 // UpdateTransaction replaces every field of the transaction with id. It
 // expects in to be validated already (see package api), and returns NotFound
-// for an unknown id or Invalid for an unknown account or category.
+// for an unknown id or Invalid for an unknown account or category. On a
+// transfer leg it updates the whole transfer (see updateTransfer).
 func (s *Store) UpdateTransaction(ctx context.Context, id int64, in TransactionInput) (Transaction, error) {
-	ok, err := s.exists(ctx, "transactions", id)
+	current, err := s.getTransaction(ctx, id)
 	if err != nil {
 		return Transaction{}, err
 	}
-	if !ok {
-		return Transaction{}, errorf(NotFound, "no transaction with id %d", id)
+	if current.TransferID != nil {
+		return s.updateTransfer(ctx, current, in)
 	}
 	if err := s.checkRefs(ctx, in); err != nil {
 		return Transaction{}, err
@@ -138,7 +167,54 @@ func (s *Store) UpdateTransaction(ctx context.Context, id int64, in TransactionI
 	return in.transaction(id), nil
 }
 
+// updateTransfer applies in to leg and the other leg of its transfer: date,
+// payee and note go to both, and the other leg gets the negated amount. The
+// accounts can't change, and legs never have a category.
+func (s *Store) updateTransfer(ctx context.Context, leg Transaction, in TransactionInput) (Transaction, error) {
+	if in.AccountID != leg.AccountID {
+		return Transaction{}, errorf(Invalid, "a transfer's accounts can't be changed")
+	}
+	if in.CategoryID != nil {
+		return Transaction{}, errorf(Invalid, "a transfer has no category")
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Transaction{}, err
+	}
+	defer tx.Rollback() // no-op after Commit
+
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE transactions
+		SET date = ?, payee = ?, note = ?,
+			amount_cents = CASE WHEN id = ? THEN ? ELSE -? END
+		WHERE transfer_id = ?`,
+		in.Date, in.Payee, in.Note, leg.ID, in.AmountCents, in.AmountCents, *leg.TransferID); err != nil {
+		return Transaction{}, fmt.Errorf("update transfer: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Transaction{}, err
+	}
+
+	leg.Date, leg.Payee, leg.Note, leg.AmountCents = in.Date, in.Payee, in.Note, in.AmountCents
+	return leg, nil
+}
+
+// DeleteTransaction deletes the transaction with id. On a transfer leg it
+// deletes the whole transfer: both legs go with the transfers row.
 func (s *Store) DeleteTransaction(ctx context.Context, id int64) error {
+	current, err := s.getTransaction(ctx, id)
+	if err != nil {
+		return err
+	}
+	if current.TransferID != nil {
+		res, err := s.db.ExecContext(ctx, `DELETE FROM transfers WHERE id = ?`, *current.TransferID)
+		if err != nil {
+			return fmt.Errorf("delete transfer: %w", err)
+		}
+		return wantOneRow(res, "transaction", id)
+	}
+
 	res, err := s.db.ExecContext(ctx, `DELETE FROM transactions WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("delete transaction: %w", err)

@@ -49,6 +49,10 @@ func New(db *sql.DB, dist fs.FS) http.Handler {
 	mux.HandleFunc("DELETE /api/transactions/{id}", h.deleteTransaction)
 	mux.HandleFunc("GET /api/payees", h.listPayees)
 
+	// TODO(M3): POST /api/transfers. The contract is in docs/api.md
+	// ("Transfers (M3)"). Editing and deleting legs already work through the
+	// transactions routes above.
+
 	// Keep unknown API paths from falling through to the frontend.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not found")
