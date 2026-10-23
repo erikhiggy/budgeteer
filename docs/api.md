@@ -62,20 +62,29 @@ DELETE (M2):
 ## Categories
 
 ```ts
-type Category = { id: number; name: string; is_income: boolean }
+type Category = {
+  id: number
+  name: string
+  is_income: boolean
+  rollover_since: string | null  // (M4) "YYYY-MM" rollover starts; null = off
+}
 ```
 
 | Request | Success | Errors |
 |---|---|---|
 | `GET /api/categories` | 200, `Category[]` with expense categories first, then income, each sorted by name (case-insensitive) | |
 | `POST /api/categories` `{name, is_income?}` | 201, the new `Category`. `is_income` defaults to `false` | 400 blank name, unknown field, bad JSON. 409 duplicate name (case-insensitive) |
-| `PATCH /api/categories/{id}` `{name?, is_income?}` (M2) | 200, the updated `Category` | 400 as for `POST`, or `{}`. 404. 409 duplicate name, or the category is `Opening balance` |
+| `PATCH /api/categories/{id}` `{name?, is_income?, rollover_since?}` (M2, M4) | 200, the updated `Category` | 400 as for `POST`, `{}`, or a rollover rule below. 404. 409 duplicate name, or the category is `Opening balance` |
 | `DELETE /api/categories/{id}` (M2) | 204 | 404. 409 the category has transactions, or is `Opening balance` |
 
 - Trim `name`.
 - Migration 0001 seeds `Income` and `Opening balance` as income categories, so a fresh database returns two categories, not `[]`.
 - PATCH changes only the fields sent, as for accounts. Changing `is_income` is allowed. It moves the category's transactions in or out of spending in reports from then on.
 - DELETE of a category with transactions is a 409 with the count, as for accounts. Uncategorizing those transactions automatically is not part of M2.
+- **Moving a category to income (M4)** deletes its goals and turns rollover off, since income categories have no caps. Moving it back starts with no cap.
+- **Rollover (M4):** `rollover_since` is a `"YYYY-MM"` month to start rolling over from, or `null` to turn it off. Omitted leaves it as it is.
+  - Only expense categories can roll over (400 `an income category can't roll over`), including when the same `PATCH` sets `is_income: true`.
+  - Setting it again, or turning it off and back on, starts fresh from the new month. Carryover from before is dropped.
 - **`Opening balance` is locked (M2):** renaming or deleting it is a 409 (`"Opening balance" is used for account opening balances and can't be renamed or deleted`). The add-account flow finds it by name. `Income` is an ordinary category.
 
 ## Transactions
@@ -147,6 +156,40 @@ type Transfer = { id: number; legs: [Transaction, Transaction] }  // legs[0] is 
 - Editing and deleting go through the leg's `/api/transactions/{id}` routes above, so there's one edit path for every row in the table.
 - Transfers never count as spending. They have no category, and M5's reports must also leave them out of "Uncategorized" (`transfer_id IS NULL`).
 
+## Goals (M4)
+
+```ts
+type Goal = {
+  category_id: number
+  name: string
+  cap_cents: number | null        // the cap in effect for the month; null = no cap
+  cap_since: string | null        // "YYYY-MM" the cap was set, which may be earlier
+  rollover_since: string | null   // as on the category
+  carryover_cents: number         // leftover from earlier months; 0 without rollover
+  available_cents: number | null  // cap + carryover; null with no cap and no rollover
+  spent_cents: number
+}
+type Goals = {
+  month: string                   // "YYYY-MM", echoed or defaulted
+  goals: Goal[]                   // every expense category, sorted by name (case-insensitive)
+  uncategorized_cents: number     // uncategorized spending in the month, not counting transfers
+}
+```
+
+| Request | Success | Errors |
+|---|---|---|
+| `GET /api/goals?month=2026-11` | 200, `Goals` | 400 invalid `month` |
+| `PUT /api/goals/{category_id}?month=2026-12` `{amount_cents}` | 200, the category's `Goal` for that month | 400 invalid `month` or body, or an income category. 404 no such category |
+
+- `month` is optional on `GET` and defaults to the current month (server local time). It's required on `PUT`.
+- **Caps** are stored by effective month. The cap for month M is the latest one set for a month `<= M`, so changing December's cap leaves November alone.
+- `PUT` sets the cap from `month` on. `amount_cents` is required: a positive number sets the cap, and `null` removes it from that month on. Zero or negative is a 400, and so is `{}`.
+- **Spent** for month M is `-SUM(amount_cents)` over the category's transactions dated in M. Refunds reduce it, so it can be negative.
+- **Carryover**, when rollover is on and `rollover_since <= M`, is the sum of (cap − spent) for each month from `rollover_since` up to, but not including, M. A month with no cap adds nothing but still subtracts what was spent. Before `rollover_since`, carryover is 0.
+- **Available** is the month's cap (0 if none) plus carryover when rollover applies; otherwise just the cap. It can be negative.
+- Deleting a category deletes its goals.
+- Transfer legs have no category, so they're never spending, and they're left out of `uncategorized_cents` too.
+
 ## Payees (M2)
 
 ```ts
@@ -182,3 +225,4 @@ type Payee = { payee: string; category_id: number | null }
   ) WHERE n = 1 ORDER BY payee COLLATE NOCASE
   ```
 - **Transfers (M3):** add the column with `ALTER TABLE transactions ADD COLUMN transfer_id INTEGER REFERENCES transfers (id) ON DELETE CASCADE`. Then deleting the `transfers` row deletes both legs, so a leg's `DELETE` is just `DELETE FROM transfers WHERE id = (SELECT transfer_id FROM transactions WHERE id = ?)`. Get `transfer_account_id` with a self-join on `transfer_id` and `id <>`.
+- **Optional fields (M4):** a pointer can't tell an omitted field from `null`, which `rollover_since` and the goal `amount_cents` need. `optional[T]` in `internal/api/json.go` records whether the field was present at all.

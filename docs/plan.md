@@ -7,7 +7,7 @@ user, and everything runs on localhost from a single Go binary.
 There are three views:
 
 1. **Transactions:** enter and browse transactions per account.
-2. **Goals:** a plain monthly spending cap per category, with spent vs. cap.
+2. **Goals:** a monthly spending cap per category, with spent vs. cap. A category can roll over, so unspent money carries into next month and overspending comes out of it.
 3. **Charts:** spending visualizations.
 
 The API contract lives in [`api.md`](api.md).
@@ -37,6 +37,7 @@ These are settled and shouldn't be reopened without a reason.
 - **Income** is a flag on categories (`is_income`). Income categories are excluded from spending. Paychecks and opening balances use income categories.
 - **Transfers** are tracked on both sides, as a linked pair of transactions (a `transfers` row with two legs). They have no category, so they never count as spending.
 - **Goal caps** are stored by effective month. The cap for month M is the latest row with `effective_month <= M`. Changing a cap never rewrites earlier months.
+- **Rollover** is caps plus carryover, not envelope budgeting. It's off by default and turned on per category from a start month (`categories.rollover_since`). For such a category, each month's leftover (cap minus spending, negative if overspent) carries into the next. There's no assigning income to categories, and credit cards need no special handling: spending is still just categorized transactions.
 - **Dates** are `YYYY-MM-DD` text with no time zone.
 - **Server** binds to `127.0.0.1:7420` only. Middleware requires a loopback `Host` (blocks DNS rebinding) and `Content-Type: application/json` on mutations (forces a CORS preflight, so other sites can't post to the API).
 
@@ -87,11 +88,14 @@ instead.
 - **0003_goals (M4):** `goals(category_id, effective_month 'YYYY-MM', amount_cents NULL)`
   - Primary key is (category_id, effective_month)
   - NULL means the cap was removed from that month on
+  - `categories.rollover_since 'YYYY-MM' NULL` added with `ALTER TABLE`; NULL means rollover is off
 
 **Derived numbers:**
 - **Account balance** is `SUM(amount_cents)` for the account.
 - **Spending** for category C in month M is `-SUM(amount_cents)` over that category's transactions in M, for expense categories only. Refunds reduce spending.
 - **Uncategorized** money going out shows as "Uncategorized".
+- **Carryover** for a rollover category in month M is the sum of (cap − spending) over every month from `rollover_since` up to, but not including, M. A month with no cap adds nothing but still subtracts its spending. Without rollover, carryover is 0.
+- **Available** for month M is the cap for M plus the carryover. It's what the Goals view compares spending against, and it can be negative.
 - **Opening balance:** a transaction in the "Opening balance" category, created by the add-account form (M2).
 
 ## API
@@ -107,7 +111,7 @@ See [`api.md`](api.md) for request and response shapes. Planned routes:
 | `PATCH / DELETE /api/accounts/{id}`, `/api/categories/{id}`, `/api/transactions/{id}`. `opening_balance_cents` on account create | M2 ✓ |
 | `GET /api/payees`: `[{payee, category_id}]` with the latest category per payee | M2 ✓ |
 | `POST /api/transfers`; editing and deleting a leg through `/api/transactions/{id}` applies to the whole transfer | M3 ✓ |
-| `GET /api/goals?month=`, `PUT /api/goals/{category_id}?month=` | M4 |
+| `GET /api/goals?month=` (cap, spent, carryover, available per expense category), `PUT /api/goals/{category_id}?month=`, `rollover_since` on category `PATCH` | M4 |
 | `GET /api/reports/spending-by-category?month=`, `GET /api/reports/monthly-spending?from=&to=` | M5 |
 
 ## Frontend
@@ -131,6 +135,7 @@ See [`api.md`](api.md) for request and response shapes. Planned routes:
   - Month picker at the top.
   - A row per expense category: inline-editable cap, spent, remaining, and a progress bar that turns `--color-over-cap` past 100%.
   - A "since Aug 2026" label when the cap comes from an earlier month.
+  - A rollover toggle per category, starting from the month on screen. Rollover rows measure against available instead of the cap, and show the carryover, e.g. "+$200 rolled over" or "−$35 from last month".
 - **Charts (M5):** spending by category (horizontal bars), 12-month trend (bars), and goal vs. actual (grouped bars). The month picker is in the URL. The palette lives in `lib/chartColors.ts`.
 - **Styling:**
   - Every color, spacing and type value is a variable in `tokens.css`.
@@ -147,7 +152,7 @@ Each milestone is runnable on its own and ends with `make test` passing.
 | **M1 Thin slice** ✓ | 0001, accounts, categories and transactions APIs. Frontend: account picker and balance, first-run account form, entry row (rules 1–2), table, Categories view | Add a transaction in the browser; it survives a restart. Handler, store and EntryRow tests |
 | **M2 Transactions view** ✓ | Edit and delete everywhere, 409 when deleting something in use, `PayeeCombobox` (rule 3) and `/api/payees`, category autofill, sidebar with balances, opening balance | Component tests for rule 3 and the Esc order. Ten rows entered without the mouse |
 | **M3 Transfers** ✓ | 0002, transfer endpoints, "Transfer to…", legs edit and delete together | A transfer moves both balances and leaves spending unchanged |
-| **M4 Goals** | 0003, goals endpoints, Goals view | A cap set in Oct and changed in Dec: Nov shows the Oct cap |
+| **M4 Goals** | 0003, goals endpoints, rollover, Goals view | A cap set in Oct and changed in Dec: Nov shows the Oct cap. A $100 rollover category from Oct with no spending shows $300 available in Dec, and overspending in Nov lowers it |
 | **M5 Charts** | Report endpoints, three charts | Report totals equal the `/api/goals` spent values |
 | **M6 Polish** | `--version`, README, dev-script cleanup | A fresh clone builds with `make build` |
 
@@ -164,7 +169,7 @@ Each milestone is runnable on its own and ends with `make test` passing.
 
 Bank sync or aggregators, importing from Budget with Buckets, backups,
 phone/mobile entry, investments, net worth, forecasting, split transactions,
-envelope rollover, multi-user, auth.
+envelope budgeting (assigning income to categories), multi-user, auth.
 
 ## Later
 
