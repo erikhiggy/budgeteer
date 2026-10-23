@@ -50,17 +50,16 @@ func TestCreateAccountDuplicateNameIsConflict(t *testing.T) {
 }
 
 func TestAccountBalanceSumsTransactions(t *testing.T) {
-	s, conn := newTestStore(t)
+	s, _ := newTestStore(t)
 	ctx := context.Background()
 	a, err := s.CreateAccount(ctx, AccountInput{Name: "Checking", Type: "checking"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Raw SQL until the transactions store methods exist.
+
 	for _, cents := range []int64{100000, -2550, -999} {
-		if _, err := conn.Exec(
-			`INSERT INTO transactions (account_id, date, amount_cents) VALUES (?, '2026-10-01', ?)`,
-			a.ID, cents); err != nil {
+		if _, err := s.CreateTransaction(ctx,
+			TransactionInput{AccountID: a.ID, Date: "2025-10-01", AmountCents: cents}); err != nil {
 			t.Fatal(err)
 		}
 	}
