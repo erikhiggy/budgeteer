@@ -58,10 +58,10 @@ budgeteer/
     ├── vite.config.ts          # /api proxy, Vitest (jsdom)
     └── src/
         ├── api/                # types.ts (mirrors api.md), client.ts, hooks.ts
-        ├── components/         # CategorySelect, Notice, …
-        ├── lib/                # money, date, cx (+ tests)
+        ├── components/         # CategorySelect, PayeeCombobox, ConfirmButton, Notice, Button.module.css
+        ├── lib/                # money, date, month, cx (+ tests)
         ├── styles/             # reset, tokens (CSS variables), global
-        └── views/              # transactions/, categories/, later goals/, charts/
+        └── views/              # transactions/, categories/, goals/, later charts/
 ```
 
 - **Dev:** `make dev` runs the Go API against `./dev.db` and Vite on :5173, which proxies `/api` to Go. `make reset-dev` deletes the dev database, and refuses while :7420 is in use.
@@ -82,12 +82,12 @@ instead.
   - `categories(id, name UNIQUE NOCASE, is_income)`, seeded with "Income" and "Opening balance"
   - `transactions(id, account_id, category_id NULL, date, payee, amount_cents, note, created_at)`
   - Indexes: (account_id, date, id), (date, category_id), payee
-- **0002_transfers (M3):**
+- **0002_transfers (M3, done):**
   - New table `transfers(id)`
   - `transactions.transfer_id` references it with `ON DELETE CASCADE`
   - "A transfer has no category" is enforced in the store, since `ALTER TABLE` can't add a CHECK
-- **0003_goals (M4):** `goals(category_id, effective_month 'YYYY-MM', amount_cents NULL)`
-  - Primary key is (category_id, effective_month)
+- **0003_goals (M4, done):** `goals(category_id, effective_month 'YYYY-MM', amount_cents NULL)`
+  - Primary key is (category_id, effective_month); rows go with their category (`ON DELETE CASCADE`), and moving a category to income deletes them
   - NULL means the cap was removed from that month on
   - `categories.rollover_since 'YYYY-MM' NULL` added with `ALTER TABLE`; NULL means rollover is off
 
@@ -125,18 +125,21 @@ See [`api.md`](api.md) for request and response shapes. Planned routes:
   - No global store.
 - **Entry row** (`views/transactions/EntryRow.tsx`):
   - Fields in Tab order: date, payee, category, amount, note.
-  - Required: date, amount, and a category or (M3) a transfer target.
+  - Required: date, amount, and a category or a transfer target.
   - **Rule 1:** Enter on an incomplete row sends nothing, focuses the first missing field, and highlights every missing field.
   - **Rule 2:** Enter on a complete row saves it from any field. Repeated Enter is ignored while the save is in flight. After saving, the row clears but keeps the date, and focus returns to payee.
   - **Rule 3 (M2):** Enter while a payee suggestion is highlighted picks the suggestion instead of saving. This needs a custom `PayeeCombobox`, because a native `<datalist>` can't tell the page whether its popup is open.
   - Esc closes the suggestions if they're open, otherwise clears the row.
-  - Category is a native `<select>` grouped into Spending / Income, plus "Transfer to…" in M3.
-- **Table:** M1 is read-only. M2 adds inline edit (same validation and Enter rules), a two-click delete, and transfer legs shown as "Transfer → X".
+  - Picking or typing a known payee fills in its latest category, unless one is already chosen.
+  - Category is a native `<select>` grouped into Spending / Income, plus a "Transfer" group listing the other accounts (`⇄ Savings`). A transfer target saves through `POST /api/transfers`.
+- **Table:** inline edit (the entry row in edit mode, same validation and Enter rules), a two-click delete (`ConfirmButton`), and transfer legs shown as "Transfer → X" / "Transfer ← X". Editing a leg keeps its other account fixed.
+- **Accounts:** a sidebar lists accounts with balances and a total. The header above the ledger renames, retypes and deletes the selected account. The add-account form takes an optional opening balance, where a plain number is money you have and `-` is money owed.
 - **Goals (M4):**
-  - Month picker at the top.
-  - A row per expense category: inline-editable cap, spent, remaining, and a progress bar that turns `--color-over-cap` past 100%.
+  - Route `/goals/:month` (`YYYY-MM`), with a month picker at the top.
+  - A row per expense category: inline-editable cap (Enter saves, empty removes, Esc cancels), spent, remaining, and a progress bar that turns `--color-over-cap` past 100%.
   - A "since Aug 2026" label when the cap comes from an earlier month.
-  - A rollover toggle per category, starting from the month on screen. Rollover rows measure against available instead of the cap, and show the carryover, e.g. "+$200 rolled over" or "−$35 from last month".
+  - A rollover toggle per category, starting from the month on screen. Rollover rows measure against available instead of the cap, and show the carryover, e.g. "+200.00 rolled over" or "−35.00 from last month".
+  - An "Uncategorized" row when the month has uncategorized spending.
 - **Charts (M5):** spending by category (horizontal bars), 12-month trend (bars), and goal vs. actual (grouped bars). The month picker is in the URL. The palette lives in `lib/chartColors.ts`.
 - **Styling:**
   - Every color, spacing and type value is a variable in `tokens.css`.
@@ -157,6 +160,15 @@ Each milestone is runnable on its own and ends with `make test` passing.
 | **M5 Charts** | Report endpoints, three charts | Report totals equal the `/api/goals` spent values |
 | **M6 Polish** | `--version`, README, dev-script cleanup | A fresh clone builds with `make build` |
 
+## Next up: M5 Charts
+
+Start a branch `feat/m5`. The milestones so far each went: contract in `api.md` first, settle open decisions with the user, then backend, frontend, tests, a browser check against a scratch database, and `plan.md` updated to mark the milestone done.
+
+- **Reuse the goals spending.** `spendingByMonth` in `internal/store/goals.go` already computes spending per category and month, leaves out transfer legs, and puts uncategorized spending under category 0. The reports should be built on it, which is what makes "report totals equal the `/api/goals` spent values" true by construction.
+- **Expense categories only**, as in the derived numbers above. Refunds reduce spending, so a month can come out negative.
+- **Goal vs. actual** compares spending with the cap (`cap_cents`), or with available for rollover categories. That's a decision for the M5 contract.
+- **Open questions for the contract:** whether charts include "Uncategorized"; how the 12-month trend picks its range (ending at the month in the URL?); whether income gets any chart (the plan says spending only); and the URL (`/charts/:month`, like Goals).
+
 ## Risks and notes
 
 - **Deleting in-use items:** deleting an account or category that has transactions returns a 409. Archiving them instead is listed under "later".
@@ -165,6 +177,9 @@ Each milestone is runnable on its own and ends with `make test` passing.
 - **Date input:** the native date input looks different in each browser. A custom date field is listed under "later".
 - **Real data:** a built binary run without `--db` writes to the real database. Try release builds with `--db ./dev.db`.
 - **Ignored directory:** `go.mod` has `ignore ./web/node_modules`, so `go test ./...` never looks inside npm packages.
+- **Vitest in a sandbox:** in a sandboxed shell, Vitest's default forked workers can time out at startup. `npx vitest run --pool=threads` works; plain `make test` is fine on a normal machine.
+- **Enter in plain forms:** the add-account, edit-account and rename-category forms submit through the browser's built-in Enter handling. Browser automation can't trigger that, so check Enter on those forms by hand after changing them.
+- **Rollover before its start month:** a month earlier than `rollover_since` still shows the category's rollover box ticked (labelled "rolls over from …"), and unticking it there turns rollover off entirely.
 
 ## Out of scope
 
@@ -178,4 +193,5 @@ Dark mode (redefine the tokens), search and filter, running-balance column,
 undo instead of a delete confirm, archiving accounts and categories, trend
 split by category, CSV export, recurring transactions, a custom category
 combobox, a custom date field, typed CSS Module class names, start at login
-via launchd, opening the browser on launch, pagination.
+via launchd, opening the browser on launch, pagination, leaving "Opening balance"
+out of payee suggestions.
