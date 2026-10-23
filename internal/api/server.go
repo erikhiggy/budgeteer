@@ -50,6 +50,8 @@ func New(db *sql.DB, dist fs.FS) http.Handler {
 	mux.HandleFunc("GET /api/payees", h.listPayees)
 	// Editing and deleting transfer legs go through the transactions routes.
 	mux.HandleFunc("POST /api/transfers", h.createTransfer)
+	mux.HandleFunc("GET /api/goals", h.listGoals)
+	mux.HandleFunc("PUT /api/goals/{category_id}", h.setGoal)
 
 	// Keep unknown API paths from falling through to the frontend.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

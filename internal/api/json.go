@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"budgeteer/internal/store"
 )
@@ -57,4 +58,26 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		status = http.StatusBadRequest
 	}
 	writeError(w, status, se.Msg)
+}
+
+// optional is a JSON field that records whether it was present at all, which
+// a pointer alone can't: with optional[*string], an omitted field leaves Set
+// false, while null sets it with a nil Value.
+type optional[T any] struct {
+	Set   bool
+	Value T
+}
+
+func (o *optional[T]) UnmarshalJSON(data []byte) error {
+	o.Set = true
+	return json.Unmarshal(data, &o.Value)
+}
+
+// parseMonth checks that s is a real "YYYY-MM" month. name is the field or
+// parameter, for the message.
+func parseMonth(name, s string) error {
+	if _, err := time.Parse("2006-01", s); err != nil || len(s) != len("2006-01") {
+		return fmt.Errorf("%s must be a month like 2026-10, got %q", name, s)
+	}
+	return nil
 }

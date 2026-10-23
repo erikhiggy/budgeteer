@@ -211,3 +211,61 @@ func TestTransfersMigrationKeepsExistingData(t *testing.T) {
 		t.Errorf("%d transactions after deleting the transfer, want 1", n)
 	}
 }
+
+func TestGoalsMigrationKeepsExistingData(t *testing.T) {
+	db := openTemp(t)
+	ctx := context.Background()
+	migrations, err := fs.Sub(embedded, "migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	upTo := func(n int) fstest.MapFS {
+		names, err := fs.Glob(migrations, "*.sql")
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := fstest.MapFS{}
+		for _, name := range names[:n] {
+			data, err := fs.ReadFile(migrations, name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			m[name] = &fstest.MapFile{Data: data}
+		}
+		return m
+	}
+
+	// A database from before M4, with a category in use.
+	if err := Migrate(ctx, db, upTo(2)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO categories (name) VALUES ('Coffee')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := Migrate(ctx, db, upTo(3)); err != nil {
+		t.Fatal(err)
+	}
+
+	var rollover sql.NullString
+	if err := db.QueryRow(`SELECT rollover_since FROM categories WHERE name = 'Coffee'`).Scan(&rollover); err != nil {
+		t.Fatal(err)
+	}
+	if rollover.Valid {
+		t.Errorf("rollover_since = %q, want NULL", rollover.String)
+	}
+
+	// Goals go with their category.
+	if _, err := db.Exec(`INSERT INTO goals (category_id, effective_month, amount_cents) SELECT id, '2026-10', 5000 FROM categories WHERE name = 'Coffee'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`DELETE FROM categories WHERE name = 'Coffee'`); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM goals`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Errorf("%d goals left after deleting the category, want 0", n)
+	}
+}
