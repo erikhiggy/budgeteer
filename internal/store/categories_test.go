@@ -23,7 +23,7 @@ func TestCreateAndListCategories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Sorted case-insensitively by name.
+	// Expense first, then income, each sorted case-insensitively by name
 	if len(got) != 5 || got[0].Name != "Coffee" || got[1].Name != "Eating Out" || got[2].Name != "Rent" || got[3].Name != "Income" || got[4].Name != "Opening balance" {
 		t.Fatalf("categories = %+v", got)
 	}
