@@ -105,7 +105,7 @@ See [`api.md`](api.md) for request and response shapes. Planned routes:
 | `GET / POST /api/transactions?account_id=&from=&to=` | M1 ✓ |
 | `PATCH / DELETE /api/accounts/{id}`, `/api/categories/{id}`, `/api/transactions/{id}`. `opening_balance_cents` on account create | M2 ✓ |
 | `GET /api/payees`: `[{payee, category_id}]` with the latest category per payee | M2 ✓ |
-| `POST / PATCH / DELETE /api/transfers` | M3 |
+| `POST /api/transfers`; editing and deleting a leg through `/api/transactions/{id}` applies to the whole transfer | M3 |
 | `GET /api/goals?month=`, `PUT /api/goals/{category_id}?month=` | M4 |
 | `GET /api/reports/spending-by-category?month=`, `GET /api/reports/monthly-spending?from=&to=` | M5 |
 

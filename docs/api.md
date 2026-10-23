@@ -89,6 +89,8 @@ type Transaction = {
   payee: string
   amount_cents: number  // negative = money out, positive = money in
   note: string
+  transfer_id: number | null          // (M3) set on both legs of a transfer
+  transfer_account_id: number | null  // (M3) the other leg's account
 }
 ```
 
@@ -96,7 +98,7 @@ type Transaction = {
 |---|---|---|
 | `GET /api/transactions?account_id=1&from=2026-10-01&to=2026-10-31` | 200, `Transaction[]`, newest first (`date DESC, id DESC`) | 400 missing or invalid `account_id`, or invalid `from`/`to`. 404 no such account |
 | `POST /api/transactions` `{account_id, category_id, date, payee?, amount_cents, note?}` | 201, the new `Transaction` | 400 for any of the rules below |
-| `PATCH /api/transactions/{id}` `{account_id, category_id, date, payee?, amount_cents, note?}` (M2) | 200, the updated `Transaction` | 400 as for `POST`. 404 |
+| `PATCH /api/transactions/{id}` `{account_id, category_id, date, payee?, amount_cents, note?}` (M2) | 200, the updated `Transaction` | 400 as for `POST`, or a transfer leg rule below. 404 |
 | `DELETE /api/transactions/{id}` (M2) | 204 | 404 |
 
 GET:
@@ -117,6 +119,34 @@ PATCH (M2):
 - Changing `account_id` moves the transaction to that account.
 - An unknown `account_id` or `category_id` in the body is a 400, as for `POST`. An unknown `{id}` in the path is a 404.
 
+Transfer legs (M3):
+- A leg is an ordinary row in `GET` results, with `category_id: null` and both transfer fields set. The table shows it as "Transfer → Savings" (money out) or "Transfer ← Savings" (money in).
+- **`PATCH` on a leg updates the whole transfer.** `date`, `payee` and `note` are copied to both legs. `amount_cents` is this leg's amount, and the other leg gets the negation, so the money still balances.
+- The accounts can't change: `account_id` must be the leg's current account (400 `a transfer's accounts can't be changed`). `category_id` must be `null` (400 `a transfer has no category`). To turn a transfer into an ordinary transaction or the reverse, delete it and add it again.
+- **`DELETE` on a leg deletes the whole transfer**, both legs.
+- `POST /api/transactions` never creates a leg; use `POST /api/transfers`.
+
+## Transfers (M3)
+
+```ts
+type Transfer = { id: number; legs: [Transaction, Transaction] }  // legs[0] is in account_id
+```
+
+| Request | Success | Errors |
+|---|---|---|
+| `POST /api/transfers` `{account_id, other_account_id, date, payee?, amount_cents, note?}` | 201, the new `Transfer` | 400 for any of the rules below |
+
+- The request is written from `account_id`'s side, with the entry row's sign convention:
+  - negative `amount_cents` (a plain number in the UI) is money out of `account_id` and into `other_account_id`
+  - positive (`+` in the UI) is money into `account_id` from `other_account_id`
+- The two legs get `amount_cents` and its negation, the same `date`, `payee` and `note`, and `category_id` NULL. Both are created in one SQL transaction.
+- Validation (all 400), with messages naming the field:
+  - `date` and `amount_cents` follow the transaction rules: a real date, non-zero amount.
+  - `account_id` and `other_account_id` must both exist, and must differ (`other_account_id must be a different account`).
+  - `payee` and `note` default to `""` and are trimmed. The payee is the user's text, on both legs.
+- Editing and deleting go through the leg's `/api/transactions/{id}` routes above, so there's one edit path for every row in the table.
+- Transfers never count as spending. They have no category, and M5's reports must also leave them out of "Uncategorized" (`transfer_id IS NULL`).
+
 ## Payees (M2)
 
 ```ts
@@ -131,6 +161,7 @@ type Payee = { payee: string; category_id: number | null }
 - Both `payee` and `category_id` come from that payee's most recent transaction (`date DESC, id DESC`). So the spelling shown is the latest one, and the category is the one autofill should pick.
 - `category_id` is `null` if the latest transaction was uncategorized. The entry row then leaves the category alone.
 - No transactions returns `[]`.
+- Transfer legs are left out (M3). Their category is always `null`, so they'd only clutter autofill.
 - The frontend filters the list as you type. There's no `?q=`, since years of manual entry stay small (see "No pagination" in the plan).
 
 ## Hints, if you want them
@@ -150,3 +181,4 @@ type Payee = { payee: string; category_id: number | null }
     FROM transactions WHERE payee <> ''
   ) WHERE n = 1 ORDER BY payee COLLATE NOCASE
   ```
+- **Transfers (M3):** add the column with `ALTER TABLE transactions ADD COLUMN transfer_id INTEGER REFERENCES transfers (id) ON DELETE CASCADE`. Then deleting the `transfers` row deletes both legs, so a leg's `DELETE` is just `DELETE FROM transfers WHERE id = (SELECT transfer_id FROM transactions WHERE id = ?)`. Get `transfer_account_id` with a self-join on `transfer_id` and `id <>`.
