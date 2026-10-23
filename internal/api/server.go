@@ -35,11 +35,11 @@ func New(db *sql.DB, dist fs.FS) http.Handler {
 
 	mux.HandleFunc("GET /api/accounts", h.listAccounts)
 	mux.HandleFunc("POST /api/accounts", h.createAccount)
+	mux.HandleFunc("GET /api/categories", h.listCategories)
+	mux.HandleFunc("POST /api/categories", h.createCategory)
 
 	// TODO(M1): categories and transactions. The contract the frontend
 	// expects is in docs/api.md.
-	//   GET  /api/categories
-	//   POST /api/categories
 	//   GET  /api/transactions?account_id=&from=&to=
 	//   POST /api/transactions
 
