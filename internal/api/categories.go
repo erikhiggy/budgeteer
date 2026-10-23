@@ -28,11 +28,13 @@ func (in *categoryInput) validate() error {
 type categoryUpdate struct {
 	Name     *string `json:"name"`
 	IsIncome *bool   `json:"is_income"`
+	// A "YYYY-MM" month to start rolling over from, or null to turn it off.
+	RolloverSince optional[*string] `json:"rollover_since"`
 }
 
 // validate normalizes the input in place and reports the first problem.
 func (in *categoryUpdate) validate() error {
-	if in.Name == nil && in.IsIncome == nil {
+	if in.Name == nil && in.IsIncome == nil && !in.RolloverSince.Set {
 		return errors.New("nothing to update")
 	}
 	if in.Name != nil {
@@ -40,6 +42,9 @@ func (in *categoryUpdate) validate() error {
 		if *in.Name == "" {
 			return errors.New("name is required")
 		}
+	}
+	if since := in.RolloverSince.Value; since != nil {
+		return parseMonth("rollover_since", *since)
 	}
 	return nil
 }
@@ -86,7 +91,12 @@ func (h *handlers) updateCategory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	category, err := h.store.UpdateCategory(r.Context(), id, store.CategoryUpdate{Name: in.Name, IsIncome: in.IsIncome})
+	category, err := h.store.UpdateCategory(r.Context(), id, store.CategoryUpdate{
+		Name:          in.Name,
+		IsIncome:      in.IsIncome,
+		SetRollover:   in.RolloverSince.Set,
+		RolloverSince: in.RolloverSince.Value,
+	})
 	if err != nil {
 		writeStoreError(w, err)
 		return
