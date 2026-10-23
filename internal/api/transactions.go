@@ -32,7 +32,20 @@ func (in *transactionInput) validate() error {
 	if in.AmountCents == 0 {
 		return errors.New("amount_cents must be non-zero")
 	}
+	in.Payee = strings.TrimSpace(in.Payee)
+	in.Note = strings.TrimSpace(in.Note)
 	return nil
+}
+
+func (in transactionInput) toStore() store.TransactionInput {
+	return store.TransactionInput{
+		AccountID:   in.AccountID,
+		CategoryID:  in.CategoryID,
+		Date:        in.Date,
+		Payee:       in.Payee,
+		AmountCents: in.AmountCents,
+		Note:        in.Note,
+	}
 }
 
 // parseTransactionFilter reads the query string for GET /api/transactions and
@@ -87,27 +100,51 @@ func (h *handlers) createTransaction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	// check for real date
 	if err := in.validate(); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	in.Payee = strings.TrimSpace(in.Payee)
-	in.Note = strings.TrimSpace(in.Note)
-
-	transaction, err := h.store.CreateTransaction(r.Context(), store.TransactionInput{
-		AccountID:   in.AccountID,
-		CategoryID:  in.CategoryID,
-		Date:        in.Date,
-		Payee:       in.Payee,
-		AmountCents: in.AmountCents,
-		Note:        in.Note,
-	})
+	transaction, err := h.store.CreateTransaction(r.Context(), in.toStore())
 	if err != nil {
 		writeStoreError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, transaction)
+}
+
+// updateTransaction takes the same full body as createTransaction.
+func (h *handlers) updateTransaction(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	var in transactionInput
+	if err := readJSON(w, r, &in); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := in.validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	transaction, err := h.store.UpdateTransaction(r.Context(), id, in.toStore())
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, transaction)
+}
+
+func (h *handlers) deleteTransaction(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.store.DeleteTransaction(r.Context(), id); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

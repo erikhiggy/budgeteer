@@ -155,3 +155,25 @@ func TestFrontendNotBuilt(t *testing.T) {
 		t.Errorf("status = %d, body = %q", res.StatusCode, body)
 	}
 }
+
+func TestIDRoutesRejectBadIDs(t *testing.T) {
+	h := newTestServer(t, builtDist)
+	for _, entity := range []string{"accounts", "categories", "transactions"} {
+		for _, id := range []string{"abc", "0", "-1", "1.5"} {
+			t.Run(entity+"/"+id, func(t *testing.T) {
+				wantError(t, h, "PATCH", "/api/"+entity+"/"+id, map[string]string{"name": "x"}, http.StatusBadRequest)
+				wantError(t, h, "DELETE", "/api/"+entity+"/"+id, nil, http.StatusBadRequest)
+			})
+		}
+	}
+}
+
+func TestDeleteNeedsJSONContentType(t *testing.T) {
+	h := newTestServer(t, builtDist)
+	res, raw := doJSON(t, h, "POST", "/api/accounts", map[string]string{"name": "Spare", "type": "cash"})
+	wantStatus(t, res, raw, http.StatusCreated)
+	res, body := do(t, h, localRequest("DELETE", "/api/accounts/1", nil))
+	if res.StatusCode != http.StatusUnsupportedMediaType {
+		t.Errorf("status = %d, want 415; body: %s", res.StatusCode, body)
+	}
+}

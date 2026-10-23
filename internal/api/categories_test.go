@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -89,4 +90,55 @@ func TestCreateCategoryErrors(t *testing.T) {
 			}
 		})
 	}
+}
+
+func createTestCategory(t *testing.T, h http.Handler, name string) store.Category {
+	t.Helper()
+	res, raw := doJSON(t, h, "POST", "/api/categories", map[string]string{"name": name})
+	wantStatus(t, res, raw, http.StatusCreated)
+	return decode[store.Category](t, raw)
+}
+
+func TestUpdateCategory(t *testing.T) {
+	h := newTestServer(t, builtDist)
+	c := createTestCategory(t, h, "coffee")
+	target := fmt.Sprintf("/api/categories/%d", c.ID)
+
+	res, raw := doJSON(t, h, "PATCH", target, map[string]any{"name": " Coffee ", "is_income": true})
+	wantStatus(t, res, raw, http.StatusOK)
+	if got := decode[store.Category](t, raw); got != (store.Category{ID: c.ID, Name: "Coffee", IsIncome: true}) {
+		t.Errorf("updated = %+v", got)
+	}
+
+	wantError(t, h, "PATCH", target, map[string]string{}, http.StatusBadRequest)
+	wantError(t, h, "PATCH", target, map[string]string{"name": ""}, http.StatusBadRequest)
+	wantError(t, h, "PATCH", target, map[string]string{"name": "INCOME"}, http.StatusConflict)
+	wantError(t, h, "PATCH", "/api/categories/999", map[string]string{"name": "X"}, http.StatusNotFound)
+}
+
+func TestOpeningBalanceCategoryIsLocked(t *testing.T) {
+	h := newTestServer(t, builtDist)
+	res, raw := doJSON(t, h, "GET", "/api/categories", nil)
+	wantStatus(t, res, raw, http.StatusOK)
+	var id int64
+	for _, c := range decode[[]store.Category](t, raw) {
+		if c.Name == "Opening balance" {
+			id = c.ID
+		}
+	}
+	target := fmt.Sprintf("/api/categories/%d", id)
+	wantError(t, h, "PATCH", target, map[string]string{"name": "Start"}, http.StatusConflict)
+	wantError(t, h, "DELETE", target, nil, http.StatusConflict)
+}
+
+func TestDeleteCategory(t *testing.T) {
+	h := newTestServer(t, builtDist)
+	a := createTestAccount(t, h, "Checking")
+	used := createTestCategory(t, h, "Coffee")
+	createTestTransaction(t, h, map[string]any{"account_id": a.ID, "category_id": used.ID, "date": "2026-10-01", "amount_cents": -100})
+	unused := createTestCategory(t, h, "Gifts")
+
+	wantError(t, h, "DELETE", fmt.Sprintf("/api/categories/%d", used.ID), nil, http.StatusConflict)
+	wantNoContent(t, h, "DELETE", fmt.Sprintf("/api/categories/%d", unused.ID))
+	wantError(t, h, "DELETE", fmt.Sprintf("/api/categories/%d", unused.ID), nil, http.StatusNotFound)
 }

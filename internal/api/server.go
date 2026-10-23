@@ -3,10 +3,12 @@ package api
 
 import (
 	"database/sql"
+	"fmt"
 	"io/fs"
 	"mime"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"budgeteer/internal/store"
@@ -35,10 +37,17 @@ func New(db *sql.DB, dist fs.FS) http.Handler {
 
 	mux.HandleFunc("GET /api/accounts", h.listAccounts)
 	mux.HandleFunc("POST /api/accounts", h.createAccount)
+	mux.HandleFunc("PATCH /api/accounts/{id}", h.updateAccount)
+	mux.HandleFunc("DELETE /api/accounts/{id}", h.deleteAccount)
 	mux.HandleFunc("GET /api/categories", h.listCategories)
 	mux.HandleFunc("POST /api/categories", h.createCategory)
+	mux.HandleFunc("PATCH /api/categories/{id}", h.updateCategory)
+	mux.HandleFunc("DELETE /api/categories/{id}", h.deleteCategory)
 	mux.HandleFunc("GET /api/transactions", h.listTransactions)
 	mux.HandleFunc("POST /api/transactions", h.createTransaction)
+	mux.HandleFunc("PATCH /api/transactions/{id}", h.updateTransaction)
+	mux.HandleFunc("DELETE /api/transactions/{id}", h.deleteTransaction)
+	mux.HandleFunc("GET /api/payees", h.listPayees)
 
 	// Keep unknown API paths from falling through to the frontend.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
@@ -48,6 +57,16 @@ func New(db *sql.DB, dist fs.FS) http.Handler {
 	mux.Handle("/", staticHandler(dist))
 
 	return guard(mux)
+}
+
+// pathID reads the {id} path value, which must be a positive integer.
+func pathID(r *http.Request) (int64, error) {
+	raw := r.PathValue("id")
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id <= 0 {
+		return 0, fmt.Errorf("invalid id %q", raw)
+	}
+	return id, nil
 }
 
 // guard rejects requests that could come from another website the user has
