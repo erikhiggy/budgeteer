@@ -1,9 +1,12 @@
 import type {
 	Account,
 	AccountInput,
+	AccountUpdate,
 	Category,
 	CategoryInput,
+	CategoryUpdate,
 	DateRange,
+	Payee,
 	Transaction,
 	TransactionInput,
 } from './types';
@@ -74,10 +77,17 @@ export const api = {
 	listAccounts: () => request<Account[]>('GET', '/api/accounts'),
 	createAccount: (input: AccountInput) =>
 		request<Account>('POST', '/api/accounts', input),
+	updateAccount: (id: number, input: AccountUpdate) =>
+		request<Account>('PATCH', `/api/accounts/${id}`, input),
+	deleteAccount: (id: number) => request<void>('DELETE', `/api/accounts/${id}`),
 
 	listCategories: () => request<Category[]>('GET', '/api/categories'),
 	createCategory: (input: CategoryInput) =>
 		request<Category>('POST', '/api/categories', input),
+	updateCategory: (id: number, input: CategoryUpdate) =>
+		request<Category>('PATCH', `/api/categories/${id}`, input),
+	deleteCategory: (id: number) =>
+		request<void>('DELETE', `/api/categories/${id}`),
 
 	listTransactions: (accountId: number, range: DateRange = {}) =>
 		request<Transaction[]>(
@@ -86,4 +96,10 @@ export const api = {
 		),
 	createTransaction: (input: TransactionInput) =>
 		request<Transaction>('POST', '/api/transactions', input),
+	updateTransaction: (id: number, input: TransactionInput) =>
+		request<Transaction>('PATCH', `/api/transactions/${id}`, input),
+	deleteTransaction: (id: number) =>
+		request<void>('DELETE', `/api/transactions/${id}`),
+
+	listPayees: () => request<Payee[]>('GET', '/api/payees'),
 };

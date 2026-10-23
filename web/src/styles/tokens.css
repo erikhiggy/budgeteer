@@ -36,4 +36,5 @@
 	/* Shape */
 	--radius-sm: 4px;
 	--radius-md: 8px;
+	--shadow-popover: 0 4px 12px rgb(0 0 0 / 0.08);
 }

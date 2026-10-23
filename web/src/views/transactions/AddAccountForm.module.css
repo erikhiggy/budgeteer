@@ -9,14 +9,27 @@
 	min-width: 220px;
 }
 
-.secondary {
-	background: transparent;
-	color: var(--color-text-muted);
-	border-color: transparent;
+.form .balance {
+	min-width: 0;
+	width: 150px;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
 }
 
+.hint,
 .error {
 	flex-basis: 100%;
 	font-size: var(--text-sm);
+}
+
+.hint {
+	color: var(--color-text-muted);
+}
+
+.hint kbd {
+	font-family: var(--font-mono);
+}
+
+.error {
 	color: var(--color-invalid);
 }

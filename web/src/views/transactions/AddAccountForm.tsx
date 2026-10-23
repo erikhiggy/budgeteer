@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useCreateAccount } from '../../api/hooks';
 import { accountTypes, type Account, type AccountType } from '../../api/types';
+import buttons from '../../components/Button.module.css';
+import { parseBalance } from '../../lib/money';
 import styles from './AddAccountForm.module.css';
 
 type Props = {
@@ -11,7 +13,11 @@ type Props = {
 export function AddAccountForm({ onCreated, onCancel }: Props) {
 	const [name, setName] = useState('');
 	const [type, setType] = useState<AccountType>('checking');
+	const [balance, setBalance] = useState('');
+	const [balanceError, setBalanceError] = useState<string | null>(null);
 	const create = useCreateAccount();
+
+	const error = balanceError ?? create.error?.message;
 
 	return (
 		<form
@@ -19,7 +25,20 @@ export function AddAccountForm({ onCreated, onCancel }: Props) {
 			aria-label='New account'
 			onSubmit={(e) => {
 				e.preventDefault();
-				create.mutate({ name: name.trim(), type }, { onSuccess: onCreated });
+				const parsed = parseBalance(balance);
+				if (!parsed.ok) {
+					setBalanceError(parsed.error);
+					return;
+				}
+				setBalanceError(null);
+				create.mutate(
+					{
+						name: name.trim(),
+						type,
+						opening_balance_cents: parsed.cents,
+					},
+					{ onSuccess: onCreated },
+				);
 			}}
 			onKeyDown={(e) => {
 				if (e.key === 'Escape' && onCancel) onCancel();
@@ -44,17 +63,32 @@ export function AddAccountForm({ onCreated, onCancel }: Props) {
 					</option>
 				))}
 			</select>
+			<input
+				aria-label='Opening balance'
+				placeholder='Opening balance'
+				inputMode='decimal'
+				autoComplete='off'
+				aria-invalid={balanceError ? true : undefined}
+				className={styles.balance}
+				value={balance}
+				onChange={(e) => setBalance(e.target.value)}
+			/>
 			<button type='submit' disabled={create.isPending}>
 				Add account
 			</button>
 			{onCancel && (
-				<button type='button' className={styles.secondary} onClick={onCancel}>
+				<button type='button' className={buttons.quiet} onClick={onCancel}>
 					Cancel
 				</button>
 			)}
-			{create.error && (
+			{error ? (
 				<p className={styles.error} role='alert'>
-					{create.error.message}
+					{error}
+				</p>
+			) : (
+				<p className={styles.hint}>
+					Opening balance is optional. Use a minus for money owed, like a credit
+					card balance: <kbd>-450.00</kbd>
 				</p>
 			)}
 		</form>

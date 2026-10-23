@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatAmount, formatCents, parseAmount } from './money';
+import { formatAmount, formatCents, parseAmount, parseBalance } from './money';
 
 describe('parseAmount', () => {
 	it.each([
@@ -65,5 +65,29 @@ describe('formatAmount', () => {
 		[-123456700, '1,234,567.00'],
 	])('%i → %j', (cents, text) => {
 		expect(formatAmount(cents)).toBe(text);
+	});
+});
+
+describe('parseBalance', () => {
+	it.each([
+		['', 0],
+		['  ', 0],
+		['0', 0],
+		['0.00', 0],
+		['1,234.56', 123456],
+		['+50', 5000],
+		['$20', 2000],
+		['-500', -50000],
+		['-$1,200.50', -120050],
+	])('%j → %i cents', (input, cents) => {
+		expect(parseBalance(input)).toEqual({ ok: true, cents });
+	});
+
+	it.each([
+		['abc', 'Opening balance must be a number like 12.34'],
+		['12.345', 'Opening balance must be a number like 12.34'],
+		['-', 'Opening balance must be a number like 12.34'],
+	])('%j → %j', (input, error) => {
+		expect(parseBalance(input)).toEqual({ ok: false, error });
 	});
 });

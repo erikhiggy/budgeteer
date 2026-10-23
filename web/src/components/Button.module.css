@@ -1,0 +1,27 @@
+/* Button variants on top of the base look in global.css. */
+
+/* For secondary actions next to a primary one: Cancel, Edit, Delete. */
+.quiet {
+	background: transparent;
+	color: var(--color-text-muted);
+	border-color: transparent;
+}
+
+.quiet:hover:not(:disabled) {
+	color: var(--color-text);
+	border-color: var(--color-border);
+}
+
+.small {
+	height: 26px;
+	padding: 0 var(--space-2);
+	font-size: var(--text-sm);
+}
+
+/* The armed state of a two-click delete. */
+.danger,
+.danger:hover:not(:disabled) {
+	background: var(--color-invalid);
+	border-color: var(--color-invalid);
+	color: var(--color-accent-contrast);
+}

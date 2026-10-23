@@ -1,10 +1,18 @@
 import { useState } from 'react';
-import { useCategories, useCreateCategory } from '../../api/hooks';
-import type { Category } from '../../api/types';
+import {
+	useCategories,
+	useCreateCategory,
+	useDeleteCategory,
+	useUpdateCategory,
+} from '../../api/hooks';
+import { openingBalanceCategory, type Category } from '../../api/types';
+import buttons from '../../components/Button.module.css';
+import { ConfirmButton } from '../../components/ConfirmButton';
 import { Notice } from '../../components/Notice';
+import { cx } from '../../lib/cx';
 import styles from './CategoriesView.module.css';
 
-/** Route: /categories. Add and list categories; edit and delete arrive in M2. */
+/** Route: /categories. Add, rename, move between spending and income, delete. */
 export function CategoriesView() {
 	const categories = useCategories();
 
@@ -101,10 +109,129 @@ function CategoryList({
 			) : (
 				<ul>
 					{categories.map((c) => (
-						<li key={c.id}>{c.name}</li>
+						<CategoryItem key={c.id} category={c} />
 					))}
 				</ul>
 			)}
 		</div>
+	);
+}
+
+function CategoryItem({ category }: { category: Category }) {
+	const [renaming, setRenaming] = useState(false);
+	const update = useUpdateCategory();
+	const remove = useDeleteCategory();
+	const error = update.error ?? remove.error;
+
+	if (renaming) {
+		return (
+			<li>
+				<RenameForm category={category} onDone={() => setRenaming(false)} />
+			</li>
+		);
+	}
+
+	const locked = category.name === openingBalanceCategory;
+	return (
+		<li>
+			<div className={styles.item}>
+				<span className={styles.name}>{category.name}</span>
+				{locked ? (
+					<span className={styles.muted}>Used for opening balances</span>
+				) : (
+					<span className={styles.actions}>
+						<button
+							type='button'
+							className={cx(buttons.quiet, buttons.small)}
+							aria-label={`Rename ${category.name}`}
+							onClick={() => setRenaming(true)}
+						>
+							Rename
+						</button>
+						<button
+							type='button'
+							className={cx(buttons.quiet, buttons.small)}
+							disabled={update.isPending}
+							onClick={() =>
+								update.mutate({
+									id: category.id,
+									input: { is_income: !category.is_income },
+								})
+							}
+						>
+							{category.is_income ? 'Move to spending' : 'Move to income'}
+						</button>
+						<ConfirmButton
+							aria-label={`Delete ${category.name}`}
+							disabled={remove.isPending}
+							onConfirm={() => remove.mutate(category.id)}
+						>
+							Delete
+						</ConfirmButton>
+					</span>
+				)}
+			</div>
+			{error && (
+				<p className={styles.error} role='alert'>
+					{error.message}
+				</p>
+			)}
+		</li>
+	);
+}
+
+function RenameForm({
+	category,
+	onDone,
+}: {
+	category: Category;
+	onDone: () => void;
+}) {
+	const [name, setName] = useState(category.name);
+	const update = useUpdateCategory();
+
+	return (
+		<form
+			className={styles.rename}
+			aria-label={`Rename ${category.name}`}
+			onSubmit={(e) => {
+				e.preventDefault();
+				if (name.trim() === category.name) return onDone();
+				update.mutate(
+					{ id: category.id, input: { name: name.trim() } },
+					{ onSuccess: onDone },
+				);
+			}}
+			onKeyDown={(e) => {
+				if (e.key === 'Escape') onDone();
+			}}
+		>
+			<input
+				aria-label='Category name'
+				autoFocus
+				required
+				value={name}
+				onChange={(e) => setName(e.target.value)}
+			/>
+			<button
+				type='submit'
+				className={buttons.small}
+				disabled={update.isPending}
+			>
+				Save
+			</button>
+			<button
+				type='button'
+				className={cx(buttons.quiet, buttons.small)}
+				onClick={onDone}
+			>
+				Cancel
+			</button>
+			{update.error && (
+				<p className={styles.error} role='alert'>
+					{update.error.message}
+				</p>
+			)}
+		</form>
 	);
 }
