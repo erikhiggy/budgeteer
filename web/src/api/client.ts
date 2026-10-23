@@ -6,6 +6,8 @@ import type {
 	CategoryInput,
 	CategoryUpdate,
 	DateRange,
+	Goal,
+	Goals,
 	Payee,
 	Transaction,
 	TransactionInput,
@@ -106,4 +108,12 @@ export const api = {
 		request<Transfer>('POST', '/api/transfers', input),
 
 	listPayees: () => request<Payee[]>('GET', '/api/payees'),
+
+	listGoals: (month: string) =>
+		request<Goals>('GET', `/api/goals${query({ month })}`),
+	/** Sets the cap from month on; null removes it. */
+	setGoal: (categoryId: number, month: string, amountCents: number | null) =>
+		request<Goal>('PUT', `/api/goals/${categoryId}${query({ month })}`, {
+			amount_cents: amountCents,
+		}),
 };

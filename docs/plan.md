@@ -20,8 +20,9 @@ The API contract lives in [`api.md`](api.md).
 | M1 Thin slice | Done |
 | M2 Transactions view | Done |
 | M3 Transfers | Done |
-| M4 Goals | Next |
-| M5–M6 | Not started |
+| M4 Goals | Done |
+| M5 Charts | Next |
+| M6 Polish | Not started |
 
 ## Decisions
 
@@ -111,7 +112,7 @@ See [`api.md`](api.md) for request and response shapes. Planned routes:
 | `PATCH / DELETE /api/accounts/{id}`, `/api/categories/{id}`, `/api/transactions/{id}`. `opening_balance_cents` on account create | M2 ✓ |
 | `GET /api/payees`: `[{payee, category_id}]` with the latest category per payee | M2 ✓ |
 | `POST /api/transfers`; editing and deleting a leg through `/api/transactions/{id}` applies to the whole transfer | M3 ✓ |
-| `GET /api/goals?month=` (cap, spent, carryover, available per expense category), `PUT /api/goals/{category_id}?month=`, `rollover_since` on category `PATCH` | M4 |
+| `GET /api/goals?month=` (cap, spent, carryover, available per expense category), `PUT /api/goals/{category_id}?month=`, `rollover_since` on category `PATCH` | M4 ✓ |
 | `GET /api/reports/spending-by-category?month=`, `GET /api/reports/monthly-spending?from=&to=` | M5 |
 
 ## Frontend
@@ -152,7 +153,7 @@ Each milestone is runnable on its own and ends with `make test` passing.
 | **M1 Thin slice** ✓ | 0001, accounts, categories and transactions APIs. Frontend: account picker and balance, first-run account form, entry row (rules 1–2), table, Categories view | Add a transaction in the browser; it survives a restart. Handler, store and EntryRow tests |
 | **M2 Transactions view** ✓ | Edit and delete everywhere, 409 when deleting something in use, `PayeeCombobox` (rule 3) and `/api/payees`, category autofill, sidebar with balances, opening balance | Component tests for rule 3 and the Esc order. Ten rows entered without the mouse |
 | **M3 Transfers** ✓ | 0002, transfer endpoints, "Transfer to…", legs edit and delete together | A transfer moves both balances and leaves spending unchanged |
-| **M4 Goals** | 0003, goals endpoints, rollover, Goals view | A cap set in Oct and changed in Dec: Nov shows the Oct cap. A $100 rollover category from Oct with no spending shows $300 available in Dec, and overspending in Nov lowers it |
+| **M4 Goals** ✓ | 0003, goals endpoints, rollover, Goals view | A cap set in Oct and changed in Dec: Nov shows the Oct cap. A $100 rollover category from Oct with no spending shows $300 available in Dec, and overspending in Nov lowers it |
 | **M5 Charts** | Report endpoints, three charts | Report totals equal the `/api/goals` spent values |
 | **M6 Polish** | `--version`, README, dev-script cleanup | A fresh clone builds with `make build` |
 

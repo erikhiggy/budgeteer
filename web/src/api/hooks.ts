@@ -17,6 +17,9 @@ export const queryKeys = {
 	categories: ['categories'] as const,
 	transactions: (accountId: number) => ['transactions', accountId] as const,
 	payees: ['payees'] as const,
+	/** Every month's goals, for invalidating all of them at once. */
+	allGoals: ['goals'] as const,
+	goals: (month: string) => ['goals', month] as const,
 };
 
 export function createQueryClient() {
@@ -80,7 +83,7 @@ export function useCreateCategory() {
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: api.createCategory,
-		onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.categories }),
+		onSuccess: () => invalidateCategories(qc),
 	});
 }
 
@@ -89,7 +92,7 @@ export function useUpdateCategory() {
 	return useMutation({
 		mutationFn: ({ id, input }: { id: number; input: CategoryUpdate }) =>
 			api.updateCategory(id, input),
-		onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.categories }),
+		onSuccess: () => invalidateCategories(qc),
 	});
 }
 
@@ -97,7 +100,7 @@ export function useDeleteCategory() {
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: api.deleteCategory,
-		onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.categories }),
+		onSuccess: () => invalidateCategories(qc),
 	});
 }
 
@@ -128,6 +131,16 @@ function invalidateTransactions(
 		),
 		qc.invalidateQueries({ queryKey: queryKeys.accounts }),
 		qc.invalidateQueries({ queryKey: queryKeys.payees }),
+		// Spending feeds every month's goals from then on, through rollover.
+		qc.invalidateQueries({ queryKey: queryKeys.allGoals }),
+	]);
+}
+
+/** Categories are also the rows of every month's goals. */
+function invalidateCategories(qc: QueryClient) {
+	return Promise.all([
+		qc.invalidateQueries({ queryKey: queryKeys.categories }),
+		qc.invalidateQueries({ queryKey: queryKeys.allGoals }),
 	]);
 }
 
@@ -177,5 +190,29 @@ export function useCreateTransfer() {
 		mutationFn: api.createTransfer,
 		onSuccess: (transfer) =>
 			invalidateTransactions(qc, ...transfer.legs.map((leg) => leg.account_id)),
+	});
+}
+
+export function useGoals(month: string) {
+	return useQuery({
+		queryKey: queryKeys.goals(month),
+		queryFn: () => api.listGoals(month),
+	});
+}
+
+export function useSetGoal() {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: ({
+			categoryId,
+			month,
+			amountCents,
+		}: {
+			categoryId: number;
+			month: string;
+			amountCents: number | null;
+		}) => api.setGoal(categoryId, month, amountCents),
+		// A cap applies from its month on, and rolls into later months.
+		onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.allGoals }),
 	});
 }

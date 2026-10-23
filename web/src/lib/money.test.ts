@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { formatAmount, formatCents, parseAmount, parseBalance } from './money';
+import {
+	formatAmount,
+	formatCents,
+	parseAmount,
+	parseBalance,
+	parseCap,
+} from './money';
 
 describe('parseAmount', () => {
 	it.each([
@@ -89,5 +95,25 @@ describe('parseBalance', () => {
 		['-', 'Opening balance must be a number like 12.34'],
 	])('%j → %j', (input, error) => {
 		expect(parseBalance(input)).toEqual({ ok: false, error });
+	});
+});
+
+describe('parseCap', () => {
+	it.each([
+		['', null],
+		['  ', null],
+		['400', 40000],
+		['+12.50', 1250],
+		['$1,200', 120000],
+	])('%j → %j', (input, cents) => {
+		expect(parseCap(input)).toEqual({ ok: true, cents });
+	});
+
+	it.each([
+		['-50', 'A cap must be positive'],
+		['0', 'A cap must be more than zero; leave it empty for no cap'],
+		['abc', 'Cap must be a number like 12.34'],
+	])('%j → %j', (input, error) => {
+		expect(parseCap(input)).toEqual({ ok: false, error });
 	});
 });

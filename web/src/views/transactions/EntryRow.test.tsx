@@ -6,9 +6,9 @@ import { todayISO } from '../../lib/date';
 import { EntryRow } from './EntryRow';
 
 const categories: Category[] = [
-	{ id: 1, name: 'Income', is_income: true },
-	{ id: 3, name: 'Groceries', is_income: false },
-	{ id: 4, name: 'Rent', is_income: false },
+	{ id: 1, name: 'Income', is_income: true, rollover_since: null },
+	{ id: 3, name: 'Groceries', is_income: false, rollover_since: null },
+	{ id: 4, name: 'Rent', is_income: false, rollover_since: null },
 ];
 
 const payees: Payee[] = [

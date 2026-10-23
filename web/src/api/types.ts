@@ -30,6 +30,8 @@ export type Category = {
 	id: number;
 	name: string;
 	is_income: boolean;
+	/** "YYYY-MM" rollover starts from; null means off. */
+	rollover_since: string | null;
 };
 
 export type CategoryInput = {
@@ -37,8 +39,13 @@ export type CategoryInput = {
 	is_income: boolean;
 };
 
-/** PATCH body: only the fields sent change. */
-export type CategoryUpdate = Partial<CategoryInput>;
+/**
+ * PATCH body: only the fields sent change. rollover_since: null turns
+ * rollover off; setting a month starts it fresh from there.
+ */
+export type CategoryUpdate = Partial<
+	CategoryInput & { rollover_since: string | null }
+>;
 
 /** Renaming or deleting this seeded category is a 409. */
 export const openingBalanceCategory = 'Opening balance';
@@ -92,3 +99,28 @@ export type Payee = {
 
 /** Inclusive YYYY-MM-DD bounds; either may be omitted. */
 export type DateRange = { from?: string; to?: string };
+
+/** One expense category's cap and spending for a month. See docs/api.md. */
+export type Goal = {
+	category_id: number;
+	name: string;
+	/** The cap in effect for the month; null = no cap. */
+	cap_cents: number | null;
+	/** "YYYY-MM" the cap was set, which may be before the month shown. */
+	cap_since: string | null;
+	rollover_since: string | null;
+	/** Leftover from earlier months (negative if overspent); 0 without rollover. */
+	carryover_cents: number;
+	/** Cap plus carryover; null with no cap and no rollover. */
+	available_cents: number | null;
+	spent_cents: number;
+};
+
+export type Goals = {
+	/** "YYYY-MM" */
+	month: string;
+	/** Every expense category, sorted by name. */
+	goals: Goal[];
+	/** Uncategorized spending in the month, not counting transfers. */
+	uncategorized_cents: number;
+};

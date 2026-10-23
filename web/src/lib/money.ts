@@ -52,6 +52,26 @@ export function parseBalance(input: string): ParsedAmount {
 	};
 }
 
+/** A cap as typed: a positive amount, or empty for no cap (null). */
+export type ParsedCap =
+	{ ok: true; cents: number | null } | { ok: false; error: string };
+
+/** Parses a goal cap. Empty means no cap; zero and negatives are rejected. */
+export function parseCap(input: string): ParsedCap {
+	const s = input.trim();
+	if (s === '') return { ok: true, cents: null };
+	if (s.startsWith('-')) return { ok: false, error: 'A cap must be positive' };
+	const parsed = parseAmount('+' + s.replace(/^\+/, ''));
+	if (parsed.ok) return parsed;
+	if (parsed.error === ZERO_AMOUNT) {
+		return {
+			ok: false,
+			error: 'A cap must be more than zero; leave it empty for no cap',
+		};
+	}
+	return { ok: false, error: parsed.error.replace(/^Amount/, 'Cap') };
+}
+
 const MINUS = '−';
 
 function digits(absCents: number): string {

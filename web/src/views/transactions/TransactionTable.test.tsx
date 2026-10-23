@@ -4,7 +4,9 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Account, Category, Transaction } from '../../api/types';
 import { TransactionTable } from './TransactionTable';
 
-const categories: Category[] = [{ id: 3, name: 'Groceries', is_income: false }];
+const categories: Category[] = [
+	{ id: 3, name: 'Groceries', is_income: false, rollover_since: null },
+];
 const accounts: Account[] = [
 	{ id: 7, name: 'Checking', type: 'checking', balance_cents: 0 },
 	{ id: 9, name: 'Savings', type: 'savings', balance_cents: 0 },
