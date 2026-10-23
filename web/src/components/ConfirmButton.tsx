@@ -25,7 +25,7 @@ const ARMED_MS = 4000;
 export function ConfirmButton({
 	onConfirm,
 	children,
-	confirmLabel = 'Confirm delete',
+	confirmLabel = 'Confirm',
 	'aria-label': ariaLabel,
 	disabled,
 	className,
