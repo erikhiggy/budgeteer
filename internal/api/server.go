@@ -48,10 +48,8 @@ func New(db *sql.DB, dist fs.FS) http.Handler {
 	mux.HandleFunc("PATCH /api/transactions/{id}", h.updateTransaction)
 	mux.HandleFunc("DELETE /api/transactions/{id}", h.deleteTransaction)
 	mux.HandleFunc("GET /api/payees", h.listPayees)
-
-	// TODO(M3): POST /api/transfers. The contract is in docs/api.md
-	// ("Transfers (M3)"). Editing and deleting legs already work through the
-	// transactions routes above.
+	// Editing and deleting transfer legs go through the transactions routes.
+	mux.HandleFunc("POST /api/transfers", h.createTransfer)
 
 	// Keep unknown API paths from falling through to the frontend.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

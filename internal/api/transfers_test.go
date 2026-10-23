@@ -1,54 +1,24 @@
 package api
 
 import (
-	"context"
-	"database/sql"
 	"fmt"
 	"net/http"
-	"path/filepath"
+	"strings"
 	"testing"
 
-	"budgeteer/internal/db"
 	"budgeteer/internal/store"
 )
 
-// newTestServerWithDB is newTestServer plus the connection, so tests can
-// insert transfers with raw SQL until POST /api/transfers exists.
-func newTestServerWithDB(t *testing.T) (http.Handler, *sql.DB) {
+// createTestTransferLegs moves cents into account a from account b (negative
+// cents is money out of a into b) and returns the legs' ids.
+func createTestTransferLegs(t *testing.T, h http.Handler, a, b int64, cents int64) (legA, legB int64) {
 	t.Helper()
-	conn, err := db.Open(context.Background(), filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { conn.Close() })
-	return New(conn, builtDist), conn
-}
-
-// insertTestTransfer adds a transfer's legs with raw SQL: cents in account a
-// and -cents in account b. It returns the legs' ids.
-func insertTestTransfer(t *testing.T, conn *sql.DB, a, b int64, cents int64) (legA, legB int64) {
-	t.Helper()
-	res, err := conn.Exec(`INSERT INTO transfers DEFAULT VALUES`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	transferID, err := res.LastInsertId()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var ids [2]int64
-	for i, leg := range [][2]int64{{a, cents}, {b, -cents}} {
-		res, err := conn.Exec(
-			`INSERT INTO transactions (account_id, date, payee, amount_cents, transfer_id) VALUES (?, '2026-10-01', 'Savings plan', ?, ?)`,
-			leg[0], leg[1], transferID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if ids[i], err = res.LastInsertId(); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return ids[0], ids[1]
+	res, raw := doJSON(t, h, "POST", "/api/transfers", map[string]any{
+		"account_id": a, "other_account_id": b, "date": "2026-10-01", "payee": "Savings plan", "amount_cents": cents,
+	})
+	wantStatus(t, res, raw, http.StatusCreated)
+	tr := decode[store.Transfer](t, raw)
+	return tr.Legs[0].ID, tr.Legs[1].ID
 }
 
 func listTestTransactions(t *testing.T, h http.Handler, accountID int64) []store.Transaction {
@@ -59,10 +29,10 @@ func listTestTransactions(t *testing.T, h http.Handler, accountID int64) []store
 }
 
 func TestTransferLegWireFormat(t *testing.T) {
-	h, conn := newTestServerWithDB(t)
+	h := newTestServer(t, builtDist)
 	checking := createTestAccount(t, h, "Checking")
 	savings := createTestAccount(t, h, "Savings")
-	insertTestTransfer(t, conn, checking.ID, savings.ID, -20000)
+	createTestTransferLegs(t, h, checking.ID, savings.ID, -20000)
 	createTestTransaction(t, h, map[string]any{"account_id": checking.ID, "date": "2026-10-02", "amount_cents": -500})
 
 	res, raw := doJSON(t, h, "GET", fmt.Sprintf("/api/transactions?account_id=%d", checking.ID), nil)
@@ -80,11 +50,11 @@ func TestTransferLegWireFormat(t *testing.T) {
 }
 
 func TestPatchTransferLeg(t *testing.T) {
-	h, conn := newTestServerWithDB(t)
+	h := newTestServer(t, builtDist)
 	checking := createTestAccount(t, h, "Checking")
 	savings := createTestAccount(t, h, "Savings")
 	c := createTestCategory(t, h, "Coffee")
-	out, _ := insertTestTransfer(t, conn, checking.ID, savings.ID, -20000)
+	out, _ := createTestTransferLegs(t, h, checking.ID, savings.ID, -20000)
 	target := fmt.Sprintf("/api/transactions/%d", out)
 
 	res, raw := doJSON(t, h, "PATCH", target, map[string]any{
@@ -110,13 +80,104 @@ func TestPatchTransferLeg(t *testing.T) {
 }
 
 func TestDeleteTransferLeg(t *testing.T) {
-	h, conn := newTestServerWithDB(t)
+	h := newTestServer(t, builtDist)
 	checking := createTestAccount(t, h, "Checking")
 	savings := createTestAccount(t, h, "Savings")
-	_, in := insertTestTransfer(t, conn, checking.ID, savings.ID, -20000)
+	_, in := createTestTransferLegs(t, h, checking.ID, savings.ID, -20000)
 
 	wantNoContent(t, h, "DELETE", fmt.Sprintf("/api/transactions/%d", in))
 	if got := listTestTransactions(t, h, checking.ID); len(got) != 0 {
 		t.Errorf("checking = %+v, want the other leg gone too", got)
+	}
+}
+
+func TestCreateTransfer(t *testing.T) {
+	h := newTestServer(t, builtDist)
+	checking := createTestAccount(t, h, "Checking")
+	savings := createTestAccount(t, h, "Savings")
+
+	res, raw := doJSON(t, h, "POST", "/api/transfers", map[string]any{
+		"account_id": checking.ID, "other_account_id": savings.ID, "date": "2026-10-23",
+		"payee": "  Rainy day ", "amount_cents": -20000, "note": " monthly ",
+	})
+	wantStatus(t, res, raw, http.StatusCreated)
+
+	// Check the wire format the frontend relies on.
+	body := decode[map[string]any](t, raw)
+	legs, ok := body["legs"].([]any)
+	if body["id"] == nil || !ok || len(legs) != 2 {
+		t.Fatalf("body = %v", body)
+	}
+	tr := decode[store.Transfer](t, raw)
+	out, in := tr.Legs[0], tr.Legs[1]
+	if out.AccountID != checking.ID || out.AmountCents != -20000 || in.AccountID != savings.ID || in.AmountCents != 20000 {
+		t.Errorf("legs = %+v", tr.Legs)
+	}
+	if out.Payee != "Rainy day" || out.Note != "monthly" || out.CategoryID != nil || *out.TransferAccountID != savings.ID {
+		t.Errorf("first leg = %+v", out)
+	}
+
+	// Both balances move; the payee isn't offered for autofill.
+	res, raw = doJSON(t, h, "GET", "/api/accounts", nil)
+	wantStatus(t, res, raw, http.StatusOK)
+	for _, a := range decode[[]store.Account](t, raw) {
+		want := map[int64]int64{checking.ID: -20000, savings.ID: 20000}[a.ID]
+		if a.BalanceCents != want {
+			t.Errorf("%s balance = %d, want %d", a.Name, a.BalanceCents, want)
+		}
+	}
+	res, raw = doJSON(t, h, "GET", "/api/payees", nil)
+	wantStatus(t, res, raw, http.StatusOK)
+	if string(raw) != "[]\n" {
+		t.Errorf("payees = %s, want []", raw)
+	}
+}
+
+func TestCreateTransferErrors(t *testing.T) {
+	h := newTestServer(t, builtDist)
+	checking := createTestAccount(t, h, "Checking")
+	savings := createTestAccount(t, h, "Savings")
+
+	// with returns a valid body with field k set to v; a nil v removes it.
+	with := func(k string, v any) map[string]any {
+		m := map[string]any{"account_id": checking.ID, "other_account_id": savings.ID, "date": "2026-10-23", "amount_cents": -100}
+		if v == nil {
+			delete(m, k)
+		} else {
+			m[k] = v
+		}
+		return m
+	}
+	cases := []struct {
+		name      string
+		body      any
+		wantField string // the field the message must name
+	}{
+		{"missing date", with("date", nil), "date"},
+		{"impossible date", with("date", "2026-02-30"), "date"},
+		{"zero amount", with("amount_cents", 0), "amount_cents"},
+		{"same account", with("other_account_id", checking.ID), "other_account_id"},
+		{"unknown account", with("account_id", 999), "account_id"},
+		{"unknown other account", with("other_account_id", 999), "other_account_id"},
+		{"missing other account", with("other_account_id", nil), "other_account_id"},
+		{"category given", with("category_id", 1), "category_id"},
+		{"malformed JSON", `{"date":`, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			res, raw := doJSON(t, h, "POST", "/api/transfers", c.body)
+			wantStatus(t, res, raw, http.StatusBadRequest)
+			msg := decode[map[string]string](t, raw)["error"]
+			if msg == "" || !strings.Contains(msg, c.wantField) {
+				t.Errorf("error = %q, want a message naming %q", msg, c.wantField)
+			}
+		})
+	}
+
+	// None of the rejected requests created anything.
+	for _, a := range []store.Account{checking, savings} {
+		if got := listTestTransactions(t, h, a.ID); len(got) != 0 {
+			t.Errorf("%s has %+v, want nothing", a.Name, got)
+		}
 	}
 }

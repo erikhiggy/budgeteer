@@ -2,39 +2,20 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 )
 
-// insertTransfer adds a transfer's two legs with raw SQL until CreateTransfer
-// exists: cents in account a, and -cents in account b. It returns the legs'
-// ids.
-func insertTransfer(t *testing.T, conn *sql.DB, a, b int64, date string, cents int64) (legA, legB int64) {
+// createTestTransfer moves cents into account a from account b (negative
+// cents is money out of a into b) and returns the legs' ids.
+func createTestTransfer(t *testing.T, s *Store, a, b int64, date string, cents int64) (legA, legB int64) {
 	t.Helper()
-	res, err := conn.Exec(`INSERT INTO transfers DEFAULT VALUES`)
+	tr, err := s.CreateTransfer(context.Background(), TransferInput{
+		AccountID: a, OtherAccountID: b, Date: date, Payee: "Savings plan", AmountCents: cents,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	transferID, err := res.LastInsertId()
-	if err != nil {
-		t.Fatal(err)
-	}
-	ids := [2]int64{}
-	for i, leg := range []struct {
-		account int64
-		cents   int64
-	}{{a, cents}, {b, -cents}} {
-		res, err := conn.Exec(
-			`INSERT INTO transactions (account_id, date, payee, amount_cents, transfer_id) VALUES (?, ?, 'Savings plan', ?, ?)`,
-			leg.account, date, leg.cents, transferID)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if ids[i], err = res.LastInsertId(); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return ids[0], ids[1]
+	return tr.Legs[0].ID, tr.Legs[1].ID
 }
 
 // twoAccounts creates Checking and Savings.
@@ -53,10 +34,10 @@ func twoAccounts(t *testing.T, s *Store) (checking, savings Account) {
 }
 
 func TestListTransactionsShowsTransferLegs(t *testing.T) {
-	s, conn := newTestStore(t)
+	s, _ := newTestStore(t)
 	ctx := context.Background()
 	checking, savings := twoAccounts(t, s)
-	out, in := insertTransfer(t, conn, checking.ID, savings.ID, "2026-10-01", -20000)
+	out, in := createTestTransfer(t, s, checking.ID, savings.ID, "2026-10-01", -20000)
 	ordinary, err := s.CreateTransaction(ctx, TransactionInput{AccountID: checking.ID, Date: "2026-10-02", AmountCents: -500})
 	if err != nil {
 		t.Fatal(err)
@@ -87,10 +68,10 @@ func TestListTransactionsShowsTransferLegs(t *testing.T) {
 }
 
 func TestUpdateTransferLegUpdatesBothLegs(t *testing.T) {
-	s, conn := newTestStore(t)
+	s, _ := newTestStore(t)
 	ctx := context.Background()
 	checking, savings := twoAccounts(t, s)
-	_, in := insertTransfer(t, conn, checking.ID, savings.ID, "2026-10-01", -20000)
+	_, in := createTestTransfer(t, s, checking.ID, savings.ID, "2026-10-01", -20000)
 
 	// Edited from the savings side: now 150.00 into savings.
 	got, err := s.UpdateTransaction(ctx, in, TransactionInput{
@@ -122,10 +103,10 @@ func TestUpdateTransferLegUpdatesBothLegs(t *testing.T) {
 }
 
 func TestUpdateTransferLegRules(t *testing.T) {
-	s, conn := newTestStore(t)
+	s, _ := newTestStore(t)
 	ctx := context.Background()
 	checking, savings := twoAccounts(t, s)
-	out, _ := insertTransfer(t, conn, checking.ID, savings.ID, "2026-10-01", -20000)
+	out, _ := createTestTransfer(t, s, checking.ID, savings.ID, "2026-10-01", -20000)
 	cat, err := s.CreateCategory(ctx, CategoryInput{Name: "Coffee"})
 	if err != nil {
 		t.Fatal(err)
@@ -148,7 +129,7 @@ func TestDeleteTransferLegDeletesBothLegs(t *testing.T) {
 	s, conn := newTestStore(t)
 	ctx := context.Background()
 	checking, savings := twoAccounts(t, s)
-	out, in := insertTransfer(t, conn, checking.ID, savings.ID, "2026-10-01", -20000)
+	out, in := createTestTransfer(t, s, checking.ID, savings.ID, "2026-10-01", -20000)
 
 	if err := s.DeleteTransaction(ctx, out); err != nil {
 		t.Fatal(err)
@@ -167,9 +148,9 @@ func TestDeleteTransferLegDeletesBothLegs(t *testing.T) {
 }
 
 func TestListPayeesLeavesOutTransfers(t *testing.T) {
-	s, conn := newTestStore(t)
+	s, _ := newTestStore(t)
 	checking, savings := twoAccounts(t, s)
-	insertTransfer(t, conn, checking.ID, savings.ID, "2026-10-01", -20000)
+	createTestTransfer(t, s, checking.ID, savings.ID, "2026-10-01", -20000)
 
 	got, err := s.ListPayees(context.Background())
 	if err != nil {
@@ -177,5 +158,86 @@ func TestListPayeesLeavesOutTransfers(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("payees = %+v, want none", got)
+	}
+}
+
+func TestCreateTransfer(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+	checking, savings := twoAccounts(t, s)
+
+	// From Savings' side, a positive amount is money into Savings from Checking.
+	tr, err := s.CreateTransfer(ctx, TransferInput{
+		AccountID: savings.ID, OtherAccountID: checking.ID, Date: "2026-10-23", Payee: "Rainy day", AmountCents: 20000, Note: "monthly",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	in, out := tr.Legs[0], tr.Legs[1]
+	if tr.ID == 0 || in.AccountID != savings.ID || in.AmountCents != 20000 || out.AccountID != checking.ID || out.AmountCents != -20000 {
+		t.Fatalf("transfer = %+v", tr)
+	}
+	for _, leg := range tr.Legs {
+		if leg.CategoryID != nil || leg.TransferID == nil || *leg.TransferID != tr.ID ||
+			leg.Date != "2026-10-23" || leg.Payee != "Rainy day" || leg.Note != "monthly" {
+			t.Errorf("leg = %+v", leg)
+		}
+	}
+	if *in.TransferAccountID != checking.ID || *out.TransferAccountID != savings.ID {
+		t.Errorf("other accounts = %d, %d", *in.TransferAccountID, *out.TransferAccountID)
+	}
+
+	// What it returns matches what's stored.
+	for _, leg := range tr.Legs {
+		got, err := s.getTransaction(ctx, leg.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.ID != leg.ID || got.AmountCents != leg.AmountCents || *got.TransferAccountID != *leg.TransferAccountID {
+			t.Errorf("stored = %+v, returned %+v", got, leg)
+		}
+	}
+
+	// A transfer moves both balances and leaves the total alone.
+	accounts, err := s.ListAccounts(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if accounts[0].BalanceCents != -20000 || accounts[1].BalanceCents != 20000 {
+		t.Errorf("balances = %+v", accounts)
+	}
+}
+
+func TestCreateTransferRules(t *testing.T) {
+	s, conn := newTestStore(t)
+	ctx := context.Background()
+	checking, _ := twoAccounts(t, s)
+
+	cases := []struct {
+		name           string
+		account, other int64
+		msg            string
+	}{
+		{"same account", checking.ID, checking.ID, "other_account_id must be a different account"},
+		{"unknown account", 99, checking.ID, "unknown account_id 99"},
+		{"unknown other account", checking.ID, 99, "unknown other_account_id 99"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := s.CreateTransfer(ctx, TransferInput{AccountID: c.account, OtherAccountID: c.other, Date: "2026-10-23", AmountCents: -100})
+			wantKind(t, err, Invalid)
+			if err.Error() != c.msg {
+				t.Errorf("message = %q, want %q", err, c.msg)
+			}
+		})
+	}
+
+	// Nothing half-made was left behind.
+	var transfers, legs int
+	if err := conn.QueryRow(`SELECT (SELECT COUNT(*) FROM transfers), (SELECT COUNT(*) FROM transactions)`).Scan(&transfers, &legs); err != nil {
+		t.Fatal(err)
+	}
+	if transfers != 0 || legs != 0 {
+		t.Errorf("%d transfers and %d transactions left, want none", transfers, legs)
 	}
 }
