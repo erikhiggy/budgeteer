@@ -1,12 +1,18 @@
 import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import type {
+	Account,
 	Category,
 	Payee,
 	Transaction,
 	TransactionInput,
+	TransferInput,
 } from '../../api/types';
 import buttons from '../../components/Button.module.css';
-import { CategorySelect } from '../../components/CategorySelect';
+import {
+	CategorySelect,
+	transferAccountId,
+	transferValue,
+} from '../../components/CategorySelect';
 import { PayeeCombobox } from '../../components/PayeeCombobox';
 import { cx } from '../../lib/cx';
 import { isISODate, todayISO } from '../../lib/date';
@@ -21,8 +27,16 @@ type Props = {
 	/** Resolves when saved; rejects with an Error whose message is shown. */
 	onSave: (input: TransactionInput) => Promise<unknown>;
 	/**
+	 * The other accounts. A new row offers them as transfer targets (saved
+	 * with onSaveTransfer); a transfer leg being edited shows its other
+	 * account, which can't change.
+	 */
+	accounts?: Account[];
+	onSaveTransfer?: (input: TransferInput) => Promise<unknown>;
+	/**
 	 * Edit mode: start from this transaction. Esc calls onCancel instead of
 	 * clearing, and after a save the parent is expected to close the row.
+	 * Editing a transfer leg saves through onSave, which updates both legs.
 	 */
 	initial?: Transaction;
 	onCancel?: () => void;
@@ -42,15 +56,32 @@ export function EntryRow({
 	categories,
 	payees,
 	onSave,
+	accounts = [],
+	onSaveTransfer,
 	initial,
 	onCancel,
 	className,
 }: Props) {
 	const editing = initial !== undefined;
+	const legOf = initial?.transfer_account_id ?? null;
+	// New rows can start a transfer; an existing row can't become one or stop
+	// being one, and a leg's other account is fixed.
+	const transferAccounts =
+		legOf !== null
+			? accounts.filter((a) => a.id === legOf)
+			: editing || !onSaveTransfer
+				? []
+				: accounts;
+
 	const [date, setDate] = useState(initial?.date ?? todayISO);
 	const [payee, setPayee] = useState(initial?.payee ?? '');
+	// A category id, transferValue(account id), or '' for none yet.
 	const [categoryId, setCategoryId] = useState(
-		initial?.category_id != null ? String(initial.category_id) : '',
+		legOf !== null
+			? transferValue(legOf)
+			: initial?.category_id != null
+				? String(initial.category_id)
+				: '',
 	);
 	const [amount, setAmount] = useState(
 		initial ? formatAmount(initial.amount_cents) : '',
@@ -76,7 +107,14 @@ export function EntryRow({
 	function findProblems(category: string): [Field, string][] {
 		const found: [Field, string][] = [];
 		if (!isISODate(date)) found.push(['date', 'Date is required']);
-		if (category === '') found.push(['category', 'Pick a category']);
+		if (category === '') {
+			found.push([
+				'category',
+				transferAccounts.length > 0
+					? 'Pick a category or a transfer'
+					: 'Pick a category',
+			]);
+		}
 		if (!parsed.ok) found.push(['amount', parsed.error]);
 		return found;
 	}
@@ -139,15 +177,23 @@ export function EntryRow({
 		savingRef.current = true;
 		setSaving(true);
 		setServerError(null);
+		const common = {
+			account_id: accountId,
+			date,
+			payee: payee.trim(),
+			amount_cents: parsed.cents,
+			note: note.trim(),
+		};
+		const transferTo = transferAccountId(category);
 		try {
-			await onSave({
-				account_id: accountId,
-				category_id: Number(category),
-				date,
-				payee: payee.trim(),
-				amount_cents: parsed.cents,
-				note: note.trim(),
-			});
+			if (transferTo !== null && !editing && onSaveTransfer) {
+				await onSaveTransfer({ ...common, other_account_id: transferTo });
+			} else {
+				await onSave({
+					...common,
+					category_id: transferTo !== null ? null : Number(category),
+				});
+			}
 			if (!editing) {
 				clear(); // keeps the date, for entering several from one receipt
 				payeeRef.current?.focus();
@@ -215,6 +261,8 @@ export function EntryRow({
 				categories={categories}
 				value={categoryId}
 				onChange={setCategoryId}
+				transferAccounts={transferAccounts}
+				disabled={legOf !== null}
 				invalid={invalid('category')}
 				className={cx(styles.field, invalid('category') && styles.invalid)}
 			/>

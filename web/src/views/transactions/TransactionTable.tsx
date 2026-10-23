@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type {
+	Account,
 	Category,
 	Payee,
 	Transaction,
@@ -16,6 +17,8 @@ import styles from './TransactionTable.module.css';
 type Props = {
 	transactions: Transaction[];
 	categories: Category[];
+	/** Every account, to name the other side of transfers. */
+	accounts: Account[];
 	payees: Payee[];
 	/** Resolves when saved; rejects with an Error whose message is shown. */
 	onUpdate: (before: Transaction, input: TransactionInput) => Promise<unknown>;
@@ -27,11 +30,22 @@ const COLUMNS = 6;
 export function TransactionTable({
 	transactions,
 	categories,
+	accounts,
 	payees,
 	onUpdate,
 	onDelete,
 }: Props) {
 	const categoryName = new Map(categories.map((c) => [c.id, c.name]));
+	const accountName = new Map(accounts.map((a) => [a.id, a.name]));
+
+	function categoryCell(tx: Transaction): string {
+		if (tx.transfer_account_id !== null) {
+			const other = accountName.get(tx.transfer_account_id) ?? '—';
+			return `Transfer ${tx.amount_cents < 0 ? '→' : '←'} ${other}`;
+		}
+		if (tx.category_id === null) return 'Uncategorized';
+		return categoryName.get(tx.category_id) ?? '—';
+	}
 	// One row at a time is open for editing.
 	const [editingId, setEditingId] = useState<number | null>(null);
 
@@ -65,6 +79,7 @@ export function TransactionTable({
 									accountId={tx.account_id}
 									categories={categories}
 									payees={payees}
+									accounts={accounts.filter((a) => a.id !== tx.account_id)}
 									initial={tx}
 									onSave={async (input) => {
 										await onUpdate(tx, input);
@@ -79,11 +94,7 @@ export function TransactionTable({
 						<tr key={tx.id}>
 							<td className={styles.date}>{formatDate(tx.date)}</td>
 							<td>{tx.payee}</td>
-							<td className={styles.muted}>
-								{tx.category_id === null
-									? 'Uncategorized'
-									: (categoryName.get(tx.category_id) ?? '—')}
-							</td>
+							<td className={styles.muted}>{categoryCell(tx)}</td>
 							<td className={styles.muted}>{tx.note}</td>
 							<td
 								className={cx(
