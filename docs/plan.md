@@ -18,8 +18,9 @@ The API contract lives in [`api.md`](api.md).
 |---|---|
 | M0 Skeleton | Done |
 | M1 Thin slice | Done |
-| M2 Transactions view | Next |
-| M3–M6 | Not started |
+| M2 Transactions view | Done |
+| M3 Transfers | Next |
+| M4–M6 | Not started |
 
 ## Decisions
 
@@ -102,8 +103,8 @@ See [`api.md`](api.md) for request and response shapes. Planned routes:
 | `GET / POST /api/accounts` | M1 ✓ |
 | `GET / POST /api/categories` | M1 ✓ |
 | `GET / POST /api/transactions?account_id=&from=&to=` | M1 ✓ |
-| `PATCH / DELETE /api/accounts/{id}`, `/api/categories/{id}`, `/api/transactions/{id}`. `opening_balance_cents` on account create | M2 |
-| `GET /api/payees`: `[{payee, category_id}]` with the latest category per payee | M2 |
+| `PATCH / DELETE /api/accounts/{id}`, `/api/categories/{id}`, `/api/transactions/{id}`. `opening_balance_cents` on account create | M2 ✓ |
+| `GET /api/payees`: `[{payee, category_id}]` with the latest category per payee | M2 ✓ |
 | `POST / PATCH / DELETE /api/transfers` | M3 |
 | `GET /api/goals?month=`, `PUT /api/goals/{category_id}?month=` | M4 |
 | `GET /api/reports/spending-by-category?month=`, `GET /api/reports/monthly-spending?from=&to=` | M5 |
@@ -143,7 +144,7 @@ Each milestone is runnable on its own and ends with `make test` passing.
 |---|---|---|
 | **M0 Skeleton** ✓ | Go server, health check, migration runner, Vite/React/TS, CSS tokens, proxy, embed, Makefile, Vitest, Prettier | `make build && ./bin/budgeteer` serves the app |
 | **M1 Thin slice** ✓ | 0001, accounts, categories and transactions APIs. Frontend: account picker and balance, first-run account form, entry row (rules 1–2), table, Categories view | Add a transaction in the browser; it survives a restart. Handler, store and EntryRow tests |
-| **M2 Transactions view** | Edit and delete everywhere, 409 when deleting something in use, `PayeeCombobox` (rule 3) and `/api/payees`, category autofill, sidebar with balances, opening balance | Component tests for rule 3 and the Esc order. Ten rows entered without the mouse |
+| **M2 Transactions view** ✓ | Edit and delete everywhere, 409 when deleting something in use, `PayeeCombobox` (rule 3) and `/api/payees`, category autofill, sidebar with balances, opening balance | Component tests for rule 3 and the Esc order. Ten rows entered without the mouse |
 | **M3 Transfers** | 0002, transfer endpoints, "Transfer to…", legs edit and delete together | A transfer moves both balances and leaves spending unchanged |
 | **M4 Goals** | 0003, goals endpoints, Goals view | A cap set in Oct and changed in Dec: Nov shows the Oct cap |
 | **M5 Charts** | Report endpoints, three charts | Report totals equal the `/api/goals` spent values |

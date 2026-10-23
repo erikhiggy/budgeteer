@@ -184,3 +184,66 @@ func TestListTransactionsErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateTransaction(t *testing.T) {
+	h := newTestServer(t, builtDist)
+	a := createTestAccount(t, h, "Checking")
+	b := createTestAccount(t, h, "Savings")
+	c := createTestCategory(t, h, "Coffee")
+	tx := createTestTransaction(t, h, map[string]any{"account_id": a.ID, "category_id": c.ID, "date": "2026-10-01", "payee": "Cafe", "amount_cents": -450})
+	target := fmt.Sprintf("/api/transactions/%d", tx.ID)
+
+	res, raw := doJSON(t, h, "PATCH", target, map[string]any{
+		"account_id": b.ID, "category_id": nil, "date": "2026-10-02", "payee": " Bakery ", "amount_cents": -600, "note": "bread",
+	})
+	wantStatus(t, res, raw, http.StatusOK)
+	got := decode[store.Transaction](t, raw)
+	if got.ID != tx.ID || got.AccountID != b.ID || got.CategoryID != nil || got.Date != "2026-10-02" ||
+		got.Payee != "Bakery" || got.AmountCents != -600 || got.Note != "bread" {
+		t.Errorf("updated = %+v", got)
+	}
+
+	// Both balances follow the move.
+	res, raw = doJSON(t, h, "GET", "/api/accounts", nil)
+	wantStatus(t, res, raw, http.StatusOK)
+	for _, acct := range decode[[]store.Account](t, raw) {
+		want := map[int64]int64{a.ID: 0, b.ID: -600}[acct.ID]
+		if acct.BalanceCents != want {
+			t.Errorf("%s balance = %d, want %d", acct.Name, acct.BalanceCents, want)
+		}
+	}
+
+	// with returns a valid body with field k set to v.
+	with := func(k string, v any) map[string]any {
+		m := map[string]any{"account_id": a.ID, "date": "2026-10-02", "amount_cents": -1}
+		m[k] = v
+		return m
+	}
+	cases := []struct {
+		name string
+		body any
+		want int
+	}{
+		{"impossible date", with("date", "2026-02-30"), http.StatusBadRequest},
+		{"zero amount", with("amount_cents", 0), http.StatusBadRequest},
+		{"unknown account", with("account_id", 999), http.StatusBadRequest},
+		{"unknown category", with("category_id", 42), http.StatusBadRequest},
+		{"unknown field", with("memo", "x"), http.StatusBadRequest},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			wantError(t, h, "PATCH", target, c.body, c.want)
+		})
+	}
+	wantError(t, h, "PATCH", "/api/transactions/999", with("note", ""), http.StatusNotFound)
+}
+
+func TestDeleteTransaction(t *testing.T) {
+	h := newTestServer(t, builtDist)
+	a := createTestAccount(t, h, "Checking")
+	tx := createTestTransaction(t, h, map[string]any{"account_id": a.ID, "date": "2026-10-01", "amount_cents": -100})
+	target := fmt.Sprintf("/api/transactions/%d", tx.ID)
+
+	wantNoContent(t, h, "DELETE", target)
+	wantError(t, h, "DELETE", target, nil, http.StatusNotFound)
+}

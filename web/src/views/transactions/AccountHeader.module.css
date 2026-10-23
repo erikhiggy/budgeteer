@@ -1,0 +1,37 @@
+.header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-2) var(--space-3);
+	min-height: 40px;
+}
+
+.name {
+	font-size: var(--text-lg);
+	font-weight: 600;
+}
+
+.type {
+	font-size: var(--text-sm);
+	color: var(--color-text-muted);
+	text-transform: capitalize;
+}
+
+.balance {
+	font-variant-numeric: tabular-nums;
+	color: var(--color-text-muted);
+}
+
+.negative {
+	color: var(--color-over-cap);
+}
+
+.spacer {
+	flex: 1;
+}
+
+.error {
+	flex-basis: 100%;
+	font-size: var(--text-sm);
+	color: var(--color-invalid);
+}

@@ -1,3 +1,5 @@
+const ZERO_AMOUNT = 'Amount cannot be zero';
+
 export type ParsedAmount =
 	{ ok: true; cents: number } | { ok: false; error: string };
 
@@ -23,8 +25,31 @@ export function parseAmount(input: string): ParsedAmount {
 	if (whole.length > 13) return { ok: false, error: 'Amount is too large' };
 
 	const cents = Number(whole || '0') * 100 + Number(frac.padEnd(2, '0'));
-	if (cents === 0) return { ok: false, error: 'Amount cannot be zero' };
+	if (cents === 0) return { ok: false, error: ZERO_AMOUNT };
 	return { ok: true, cents: m[1] === '+' ? cents : -cents };
+}
+
+/**
+ * Parses an opening balance. Unlike a transaction amount, a plain number is
+ * money you have (positive), and a leading - is money owed, e.g. on a credit
+ * card. Empty means no opening balance (0).
+ */
+export function parseBalance(input: string): ParsedAmount {
+	const s = input.trim();
+	if (s === '') return { ok: true, cents: 0 };
+	const parsed = parseAmount('+' + s.replace(/^[+-]/, ''));
+	if (parsed.ok) {
+		return {
+			ok: true,
+			cents: s.startsWith('-') ? -parsed.cents : parsed.cents,
+		};
+	}
+	// A zero balance is fine; it just means none.
+	if (parsed.error === ZERO_AMOUNT) return { ok: true, cents: 0 };
+	return {
+		ok: false,
+		error: parsed.error.replace(/^Amount/, 'Opening balance'),
+	};
 }
 
 const MINUS = '−';

@@ -6,6 +6,9 @@
 	border-collapse: separate;
 	border-spacing: 0;
 	overflow: hidden;
+	/* Column widths come from the header, so the inline editor can't widen
+	   the table. */
+	table-layout: fixed;
 }
 
 .table th,
@@ -50,4 +53,42 @@
 	padding: var(--space-6) !important;
 	text-align: center !important;
 	color: var(--color-text-muted);
+}
+
+.actions {
+	width: 150px;
+	white-space: nowrap;
+	text-align: right !important;
+}
+
+/* Revealed on hover or keyboard focus, so the table stays quiet. */
+.actions button {
+	opacity: 0;
+}
+
+tr:hover .actions button,
+.actions button:focus-visible,
+.actions button[data-armed] {
+	opacity: 1;
+}
+
+.editing td {
+	padding: var(--space-1);
+	background: var(--color-bg);
+}
+
+.editor {
+	grid-template-columns:
+		140px minmax(0, 1.4fr) minmax(0, 1fr) 100px minmax(0, 1fr)
+		auto;
+	border-color: var(--color-accent);
+}
+
+.visuallyHidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
 }

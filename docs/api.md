@@ -14,9 +14,20 @@ curl -s localhost:7420/api/accounts -H 'Content-Type: application/json' \
 The frontend's copy of these shapes is `web/src/api/types.ts`. Keep the two
 in sync.
 
-## Accounts (done, use as the reference)
+## Rules for `{id}` routes (M2)
 
-Code: `internal/store/accounts.go`, `internal/api/accounts.go`, and their tests.
+These apply to every `PATCH` and `DELETE` below.
+
+- `{id}` must be a positive integer, otherwise 400 (`invalid id "abc"`).
+- No row with that id is a 404 (`no account with id 7`).
+- `PATCH` returns 200 with the updated object, in the same shape as the list endpoint returns it.
+- `DELETE` returns 204 with no body.
+- `DELETE` is a mutation, so it needs `Content-Type: application/json` too, even though it has no body.
+- Fields in a `PATCH` body follow the same validation as `POST`, with the same 400 messages.
+
+## Accounts
+
+Code: `internal/store/accounts.go`, `internal/api/accounts.go`, and their tests. The M1 routes are the reference pattern for the rest of the API.
 
 ```ts
 type Account = { id: number; name: string; type: 'checking' | 'savings' | 'credit' | 'cash'; balance_cents: number }
@@ -25,9 +36,30 @@ type Account = { id: number; name: string; type: 'checking' | 'savings' | 'credi
 | Request | Success | Errors |
 |---|---|---|
 | `GET /api/accounts` | 200, `Account[]` sorted by name (case-insensitive) | |
-| `POST /api/accounts` `{name, type}` | 201, the new `Account` | 400 blank name, bad type, unknown field, bad JSON. 409 duplicate name (case-insensitive) |
+| `POST /api/accounts` `{name, type, opening_balance_cents?}` | 201, the new `Account` | 400 blank name, bad type, unknown field, bad JSON. 409 duplicate name (case-insensitive) |
+| `PATCH /api/accounts/{id}` `{name?, type?}` (M2) | 200, the updated `Account` | 400 as for `POST`, or an empty body `{}`. 404. 409 duplicate name |
+| `DELETE /api/accounts/{id}` (M2) | 204 | 404. 409 the account has transactions |
 
-## Categories (M1)
+Opening balance (M2):
+- `opening_balance_cents` is optional. Omitted or `0` means no opening balance.
+- If it's non-zero, the same request also creates a transaction in that account:
+  - category: the seeded `Opening balance` category
+  - date: today, in the server's local time
+  - payee `Opening balance`, note `""`
+  - amount: `opening_balance_cents` as given. Positive for money you have; negative for a credit card that starts out owing.
+- The account and its opening transaction are created in one SQL transaction, so a failure leaves neither behind.
+- The response's `balance_cents` includes the opening balance.
+
+PATCH (M2):
+- Only the fields sent are changed. Omitted fields keep their current value.
+- `name` is trimmed. Renaming to a different case of the current name (`checking` → `Checking`) is allowed and isn't a conflict.
+- At least one field is required; `{}` is a 400 (`nothing to update`).
+
+DELETE (M2):
+- An account with any transactions can't be deleted. The 409 message gives the count, e.g. `"Checking" has 12 transactions; delete or move them first`.
+- Archiving instead of deleting is listed under "later" in the plan.
+
+## Categories
 
 ```ts
 type Category = { id: number; name: string; is_income: boolean }
@@ -37,11 +69,16 @@ type Category = { id: number; name: string; is_income: boolean }
 |---|---|---|
 | `GET /api/categories` | 200, `Category[]` with expense categories first, then income, each sorted by name (case-insensitive) | |
 | `POST /api/categories` `{name, is_income?}` | 201, the new `Category`. `is_income` defaults to `false` | 400 blank name, unknown field, bad JSON. 409 duplicate name (case-insensitive) |
+| `PATCH /api/categories/{id}` `{name?, is_income?}` (M2) | 200, the updated `Category` | 400 as for `POST`, or `{}`. 404. 409 duplicate name, or the category is `Opening balance` |
+| `DELETE /api/categories/{id}` (M2) | 204 | 404. 409 the category has transactions, or is `Opening balance` |
 
 - Trim `name`.
 - Migration 0001 seeds `Income` and `Opening balance` as income categories, so a fresh database returns two categories, not `[]`.
+- PATCH changes only the fields sent, as for accounts. Changing `is_income` is allowed. It moves the category's transactions in or out of spending in reports from then on.
+- DELETE of a category with transactions is a 409 with the count, as for accounts. Uncategorizing those transactions automatically is not part of M2.
+- **`Opening balance` is locked (M2):** renaming or deleting it is a 409 (`"Opening balance" is used for account opening balances and can't be renamed or deleted`). The add-account flow finds it by name. `Income` is an ordinary category.
 
-## Transactions (M1)
+## Transactions
 
 ```ts
 type Transaction = {
@@ -59,6 +96,8 @@ type Transaction = {
 |---|---|---|
 | `GET /api/transactions?account_id=1&from=2026-10-01&to=2026-10-31` | 200, `Transaction[]`, newest first (`date DESC, id DESC`) | 400 missing or invalid `account_id`, or invalid `from`/`to`. 404 no such account |
 | `POST /api/transactions` `{account_id, category_id, date, payee?, amount_cents, note?}` | 201, the new `Transaction` | 400 for any of the rules below |
+| `PATCH /api/transactions/{id}` `{account_id, category_id, date, payee?, amount_cents, note?}` (M2) | 200, the updated `Transaction` | 400 as for `POST`. 404 |
+| `DELETE /api/transactions/{id}` (M2) | 204 | 404 |
 
 GET:
 - `account_id` is required.
@@ -73,11 +112,41 @@ POST validation (all 400):
 - `payee` and `note` default to `""` and are trimmed.
 - The message should name the field, e.g. `unknown category_id 42`, since the UI shows it next to the entry row.
 
+PATCH (M2):
+- **Unlike accounts and categories, a transaction `PATCH` takes the full body**, with the same fields and rules as `POST`. The inline editor always has every field. This also avoids the difference between an omitted `category_id` (unchanged) and `null` (uncategorized).
+- Changing `account_id` moves the transaction to that account.
+- An unknown `account_id` or `category_id` in the body is a 400, as for `POST`. An unknown `{id}` in the path is a 404.
+
+## Payees (M2)
+
+```ts
+type Payee = { payee: string; category_id: number | null }
+```
+
+| Request | Success | Errors |
+|---|---|---|
+| `GET /api/payees` | 200, `Payee[]` sorted by payee (case-insensitive) | |
+
+- One entry per payee across all accounts, matched case-insensitively. Empty payees are left out.
+- Both `payee` and `category_id` come from that payee's most recent transaction (`date DESC, id DESC`). So the spelling shown is the latest one, and the category is the one autofill should pick.
+- `category_id` is `null` if the latest transaction was uncategorized. The entry row then leaves the category alone.
+- No transactions returns `[]`.
+- The frontend filters the list as you type. There's no `?q=`, since years of manual entry stay small (see "No pagination" in the plan).
+
 ## Hints, if you want them
 
-- Copy the accounts files as a starting point: input struct with `validate()`, store method, `writeStoreError`.
+- The M1 handlers are the pattern: an input struct with `validate()`, a store method, and `writeStoreError`. The test helpers `doJSON`, `decode[T]`, `wantStatus` (api) and `newTestStore`, `wantKind` (store) are ready to use.
 - A nullable JSON number decodes cleanly into `*int64`. When writing it to SQLite, `nil` becomes NULL. When reading it back, scan into `sql.NullInt64` or `*int64`.
-- `time.Parse(time.DateOnly, s)` both checks the format and rejects impossible dates.
-- A bad `account_id` or `category_id` makes the insert fail with a foreign key error (`isForeignKey` in `store.go`). SQLite doesn't say which column caused it. Either check existence first, or turn the error into `errorf(Invalid, …)` with a message covering both.
-- The test helpers `doJSON`, `decode[T]`, `wantStatus` (api) and `newTestStore`, `wantKind` (store) are ready to use.
-- `TestAccountBalanceSumsTransactions` inserts transactions with raw SQL. Once you have `CreateTransaction`, switching it over is a nice check that your method works.
+- **Path ids:** register routes like `"PATCH /api/accounts/{id}"` and read the id with `r.PathValue("id")`, then `strconv.ParseInt`. One small `pathID(r) (int64, error)` helper covers all six routes.
+- **Partial PATCH:** use pointer fields (`Name *string`, `Type *string`, `IsIncome *bool`); `nil` means not sent. Build the `SET` clause from the non-nil fields, the same way `ListTransactions` builds its `WHERE`.
+- **404 vs no-op:** `res.RowsAffected()` is 0 when no row matched the id. That's simpler than an existence check before an `UPDATE` or `DELETE`. Then read the row back for the `PATCH` response.
+- **In-use deletes:** the foreign keys are `ON DELETE RESTRICT`, so deleting a used account or category already fails with a foreign key error. `isForeignKey` alone can't give the count for the message, so count first (`SELECT COUNT(*) FROM transactions WHERE account_id = ?`). Keep the `isForeignKey` check as a backstop.
+- **Opening balance:** use `s.db.BeginTx`, run both inserts on the `*sql.Tx`, and `defer tx.Rollback()` (it's a no-op after `Commit`). Find the category with `SELECT id FROM categories WHERE name = 'Opening balance'`. Use `time.Now().Format(time.DateOnly)` for the date.
+- **Payees:** SQLite window functions do the "latest per payee" in one query:
+  ```sql
+  SELECT payee, category_id FROM (
+    SELECT payee, category_id,
+           ROW_NUMBER() OVER (PARTITION BY payee COLLATE NOCASE ORDER BY date DESC, id DESC) AS n
+    FROM transactions WHERE payee <> ''
+  ) WHERE n = 1 ORDER BY payee COLLATE NOCASE
+  ```

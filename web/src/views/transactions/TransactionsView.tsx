@@ -1,15 +1,18 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router';
 import {
 	useAccounts,
 	useCategories,
 	useCreateTransaction,
+	useDeleteTransaction,
+	usePayees,
 	useTransactions,
+	useUpdateTransaction,
 } from '../../api/hooks';
-import type { Account, Category } from '../../api/types';
+import type { Account, Category, Payee } from '../../api/types';
 import { Notice } from '../../components/Notice';
-import { cx } from '../../lib/cx';
-import { formatCents } from '../../lib/money';
+import { AccountHeader } from './AccountHeader';
+import { AccountSidebar } from './AccountSidebar';
 import { AddAccountForm } from './AddAccountForm';
 import { EntryRow } from './EntryRow';
 import { TransactionTable } from './TransactionTable';
@@ -51,53 +54,39 @@ export function TransactionsView() {
 	}
 
 	return (
-		<section className={styles.view}>
-			<div className={styles.toolbar}>
-				<select
-					aria-label='Account'
-					className={styles.accountSelect}
-					value={account.id}
-					onChange={(e) => navigate(`/transactions/${e.target.value}`)}
-				>
-					{accounts.data.map((a) => (
-						<option key={a.id} value={a.id}>
-							{a.name}
-						</option>
-					))}
-				</select>
-				<span
-					className={cx(
-						styles.balance,
-						account.balance_cents < 0 && styles.negative,
-					)}
-				>
-					Balance {formatCents(account.balance_cents)}
-				</span>
-				<span className={styles.spacer} />
-				{!adding && (
-					<button type='button' onClick={() => setAdding(true)}>
-						New account
-					</button>
+		<div className={styles.layout}>
+			<AccountSidebar
+				accounts={accounts.data}
+				onNewAccount={() => setAdding(true)}
+			/>
+			<section className={styles.view}>
+				{adding && (
+					<AddAccountForm
+						onCreated={(a) => {
+							setAdding(false);
+							goTo(a);
+						}}
+						onCancel={() => setAdding(false)}
+					/>
 				)}
-			</div>
-
-			{adding && (
-				<AddAccountForm
-					onCreated={(a) => {
-						setAdding(false);
-						goTo(a);
-					}}
-					onCancel={() => setAdding(false)}
-				/>
-			)}
-
-			<AccountLedger key={account.id} account={account} />
-		</section>
+				{/* Keyed so switching accounts starts both fresh (closes editors, clears the entry row). */}
+				<Fragment key={account.id}>
+					<AccountHeader
+						account={account}
+						onDeleted={() => navigate('/transactions', { replace: true })}
+					/>
+					<AccountLedger account={account} />
+				</Fragment>
+			</section>
+		</div>
 	);
 }
 
 function AccountLedger({ account }: { account: Account }) {
 	const categories = useCategories();
+	// Suggestions are a nicety: the row still works while they load or if
+	// they fail.
+	const payees = usePayees();
 
 	if (categories.isPending) return <Notice>Loading categories…</Notice>;
 	if (categories.isError) {
@@ -108,39 +97,41 @@ function AccountLedger({ account }: { account: Account }) {
 		);
 	}
 
+	const props = {
+		account,
+		categories: categories.data,
+		payees: payees.data ?? [],
+	};
 	return (
 		<>
-			<Entry account={account} categories={categories.data} />
-			<Ledger account={account} categories={categories.data} />
+			<Entry {...props} />
+			<Ledger {...props} />
 		</>
 	);
 }
 
-function Entry({
-	account,
-	categories,
-}: {
+type LedgerProps = {
 	account: Account;
 	categories: Category[];
-}) {
+	payees: Payee[];
+};
+
+function Entry({ account, categories, payees }: LedgerProps) {
 	const create = useCreateTransaction();
 	return (
 		<EntryRow
 			accountId={account.id}
 			categories={categories}
+			payees={payees}
 			onSave={create.mutateAsync}
 		/>
 	);
 }
 
-function Ledger({
-	account,
-	categories,
-}: {
-	account: Account;
-	categories: Category[];
-}) {
+function Ledger({ account, categories, payees }: LedgerProps) {
 	const transactions = useTransactions(account.id);
+	const update = useUpdateTransaction();
+	const remove = useDeleteTransaction();
 
 	if (transactions.isPending) return <Notice>Loading transactions…</Notice>;
 	if (transactions.isError) {
@@ -151,9 +142,19 @@ function Ledger({
 		);
 	}
 	return (
-		<TransactionTable
-			transactions={transactions.data}
-			categories={categories}
-		/>
+		<>
+			{remove.error && (
+				<Notice tone='error'>
+					Couldn’t delete the transaction: {remove.error.message}
+				</Notice>
+			)}
+			<TransactionTable
+				transactions={transactions.data}
+				categories={categories}
+				payees={payees}
+				onUpdate={(before, input) => update.mutateAsync({ before, input })}
+				onDelete={(tx) => remove.mutate(tx)}
+			/>
+		</>
 	);
 }

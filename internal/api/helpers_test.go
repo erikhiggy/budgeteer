@@ -49,3 +49,24 @@ func wantStatus(t *testing.T, res *http.Response, raw []byte, want int) {
 		t.Fatalf("status = %d, want %d; body: %s", res.StatusCode, want, raw)
 	}
 }
+
+// wantError fails the test unless the response has status want and an error
+// message.
+func wantError(t *testing.T, h http.Handler, method, target string, body any, want int) {
+	t.Helper()
+	res, raw := doJSON(t, h, method, target, body)
+	wantStatus(t, res, raw, want)
+	if e := decode[map[string]string](t, raw); e["error"] == "" {
+		t.Errorf("missing error message: %s", raw)
+	}
+}
+
+// wantNoContent fails the test unless the response is a 204 with no body.
+func wantNoContent(t *testing.T, h http.Handler, method, target string) {
+	t.Helper()
+	res, raw := doJSON(t, h, method, target, nil)
+	wantStatus(t, res, raw, http.StatusNoContent)
+	if len(raw) != 0 {
+		t.Errorf("body = %q, want empty", raw)
+	}
+}

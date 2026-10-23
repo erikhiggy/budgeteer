@@ -146,3 +146,82 @@ func TestCreateTransactionUnknownCategoryIsInvalid(t *testing.T) {
 		t.Errorf("message = %q", err)
 	}
 }
+
+func TestUpdateTransaction(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+	a, err := s.CreateAccount(ctx, AccountInput{Name: "Checking", Type: "checking"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.CreateAccount(ctx, AccountInput{Name: "Savings", Type: "savings"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat, err := s.CreateCategory(ctx, CategoryInput{Name: "Coffee"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := s.CreateTransaction(ctx, TransactionInput{AccountID: a.ID, CategoryID: &cat.ID, Date: "2026-10-01", Payee: "Cafe", AmountCents: -450})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Every field is replaced, including moving accounts and uncategorizing.
+	in := TransactionInput{AccountID: b.ID, CategoryID: nil, Date: "2026-10-02", Payee: "Bakery", AmountCents: -600, Note: "bread"}
+	got, err := s.UpdateTransaction(ctx, created.ID, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := in.transaction(created.ID); got != want {
+		t.Errorf("updated = %+v, want %+v", got, want)
+	}
+	list, err := s.ListTransactions(ctx, TransactionFilter{AccountID: b.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0] != got {
+		t.Errorf("list = %+v, want [%+v]", list, got)
+	}
+
+	_, err = s.UpdateTransaction(ctx, 99, in)
+	wantKind(t, err, NotFound)
+
+	in.AccountID = 99
+	_, err = s.UpdateTransaction(ctx, created.ID, in)
+	wantKind(t, err, Invalid)
+
+	in.AccountID = a.ID
+	bad := int64(42)
+	in.CategoryID = &bad
+	_, err = s.UpdateTransaction(ctx, created.ID, in)
+	wantKind(t, err, Invalid)
+	if err.Error() != "unknown category_id 42" {
+		t.Errorf("message = %q", err)
+	}
+}
+
+func TestDeleteTransaction(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+	a, err := s.CreateAccount(ctx, AccountInput{Name: "Checking", Type: "checking"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := s.CreateTransaction(ctx, TransactionInput{AccountID: a.ID, Date: "2026-10-01", AmountCents: -450})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.DeleteTransaction(ctx, created.ID); err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.ListTransactions(ctx, TransactionFilter{AccountID: a.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 0 {
+		t.Errorf("list = %+v, want empty", list)
+	}
+	wantKind(t, s.DeleteTransaction(ctx, created.ID), NotFound)
+}

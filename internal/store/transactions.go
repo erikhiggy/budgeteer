@@ -77,25 +77,11 @@ func (s *Store) ListTransactions(ctx context.Context, f TransactionFilter) ([]Tr
 }
 
 // CreateTransaction expects in to be validated already (see package api). It
-// returns an Invalid error, naming the field, if the account doesn't exist.
+// returns an Invalid error, naming the field, if the account or category
+// doesn't exist.
 func (s *Store) CreateTransaction(ctx context.Context, in TransactionInput) (Transaction, error) {
-	ok, err := s.exists(ctx, "accounts", in.AccountID)
-	if err != nil {
+	if err := s.checkRefs(ctx, in); err != nil {
 		return Transaction{}, err
-	}
-	if !ok {
-		return Transaction{}, errorf(Invalid, "unknown account_id %d", in.AccountID)
-	}
-
-	// We don't care about nil category ids
-	if in.CategoryID != nil {
-		ok, err := s.exists(ctx, "categories", *in.CategoryID)
-		if err != nil {
-			return Transaction{}, err
-		}
-		if !ok {
-			return Transaction{}, errorf(Invalid, "unknown category_id %d", *in.CategoryID)
-		}
 	}
 
 	res, err := s.db.ExecContext(ctx,
@@ -115,6 +101,76 @@ func (s *Store) CreateTransaction(ctx context.Context, in TransactionInput) (Tra
 	if err != nil {
 		return Transaction{}, err
 	}
+	return in.transaction(id), nil
+}
+
+// UpdateTransaction replaces every field of the transaction with id. It
+// expects in to be validated already (see package api), and returns NotFound
+// for an unknown id or Invalid for an unknown account or category.
+func (s *Store) UpdateTransaction(ctx context.Context, id int64, in TransactionInput) (Transaction, error) {
+	ok, err := s.exists(ctx, "transactions", id)
+	if err != nil {
+		return Transaction{}, err
+	}
+	if !ok {
+		return Transaction{}, errorf(NotFound, "no transaction with id %d", id)
+	}
+	if err := s.checkRefs(ctx, in); err != nil {
+		return Transaction{}, err
+	}
+
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE transactions
+		SET account_id = ?, category_id = ?, date = ?, payee = ?, amount_cents = ?, note = ?
+		WHERE id = ?`,
+		in.AccountID, in.CategoryID, in.Date, in.Payee, in.AmountCents, in.Note, id,
+	)
+	// Backstop for a row deleted between the checks above and the update.
+	if isForeignKey(err) {
+		return Transaction{}, errorf(Invalid, "unknown account_id or category_id")
+	}
+	if err != nil {
+		return Transaction{}, fmt.Errorf("update transaction: %w", err)
+	}
+	if err := wantOneRow(res, "transaction", id); err != nil {
+		return Transaction{}, err
+	}
+	return in.transaction(id), nil
+}
+
+func (s *Store) DeleteTransaction(ctx context.Context, id int64) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM transactions WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete transaction: %w", err)
+	}
+	return wantOneRow(res, "transaction", id)
+}
+
+// checkRefs returns an Invalid error, naming the field, if in refers to an
+// account or category that doesn't exist. A nil CategoryID is uncategorized
+// and always fine.
+func (s *Store) checkRefs(ctx context.Context, in TransactionInput) error {
+	ok, err := s.exists(ctx, "accounts", in.AccountID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errorf(Invalid, "unknown account_id %d", in.AccountID)
+	}
+
+	if in.CategoryID != nil {
+		ok, err := s.exists(ctx, "categories", *in.CategoryID)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errorf(Invalid, "unknown category_id %d", *in.CategoryID)
+		}
+	}
+	return nil
+}
+
+func (in TransactionInput) transaction(id int64) Transaction {
 	return Transaction{
 		ID:          id,
 		AccountID:   in.AccountID,
@@ -123,14 +179,5 @@ func (s *Store) CreateTransaction(ctx context.Context, in TransactionInput) (Tra
 		Payee:       in.Payee,
 		AmountCents: in.AmountCents,
 		Note:        in.Note,
-	}, nil
-}
-
-// exists reports whether table has a row with id. table is spliced into the
-// SQL, so it must be a constant, never user input.
-func (s *Store) exists(ctx context.Context, table string, id int64) (bool, error) {
-	var ok bool
-	err := s.db.QueryRowContext(ctx,
-		`SELECT EXISTS (SELECT 1 FROM `+table+` WHERE id = ?)`, id).Scan(&ok)
-	return ok, err
+	}
 }

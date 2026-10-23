@@ -15,6 +15,37 @@
 	min-width: 240px;
 }
 
+.item,
+.rename {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-2);
+	min-height: 28px;
+}
+
+.name {
+	flex: 1;
+}
+
+.rename input {
+	flex: 1;
+	min-width: 0;
+	height: 28px;
+}
+
+/* Revealed on hover or keyboard focus, so the list stays quiet. */
+.actions {
+	display: flex;
+	gap: var(--space-1);
+	opacity: 0;
+}
+
+.item:hover .actions,
+.actions:focus-within {
+	opacity: 1;
+}
+
 .checkbox {
 	display: inline-flex;
 	align-items: center;
