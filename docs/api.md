@@ -27,7 +27,7 @@ type Account = { id: number; name: string; type: 'checking' | 'savings' | 'credi
 | `GET /api/accounts` | 200, `Account[]` sorted by name (case-insensitive) | |
 | `POST /api/accounts` `{name, type}` | 201, the new `Account` | 400 blank name, bad type, unknown field, bad JSON. 409 duplicate name (case-insensitive) |
 
-## Categories (M1, yours)
+## Categories (M1)
 
 ```ts
 type Category = { id: number; name: string; is_income: boolean }
@@ -41,7 +41,7 @@ type Category = { id: number; name: string; is_income: boolean }
 - Trim `name`.
 - Migration 0001 seeds `Income` and `Opening balance` as income categories, so a fresh database returns two categories, not `[]`.
 
-## Transactions (M1, yours)
+## Transactions (M1)
 
 ```ts
 type Transaction = {
