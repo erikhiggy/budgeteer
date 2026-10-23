@@ -19,7 +19,7 @@ const ARMED_MS = 4000;
 
 /**
  * A two-click button for deletes: the first click turns it into
- * "Confirm delete", the second confirms. Leaving it (blur) or waiting
+ * "Confirm", the second confirms. Leaving it (blur) or waiting
  * a few seconds disarms it.
  */
 export function ConfirmButton({

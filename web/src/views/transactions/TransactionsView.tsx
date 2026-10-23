@@ -4,6 +4,7 @@ import {
 	useAccounts,
 	useCategories,
 	useCreateTransaction,
+	useCreateTransfer,
 	useDeleteTransaction,
 	usePayees,
 	useTransactions,
@@ -75,14 +76,20 @@ export function TransactionsView() {
 						account={account}
 						onDeleted={() => navigate('/transactions', { replace: true })}
 					/>
-					<AccountLedger account={account} />
+					<AccountLedger account={account} accounts={accounts.data} />
 				</Fragment>
 			</section>
 		</div>
 	);
 }
 
-function AccountLedger({ account }: { account: Account }) {
+function AccountLedger({
+	account,
+	accounts,
+}: {
+	account: Account;
+	accounts: Account[];
+}) {
 	const categories = useCategories();
 	// Suggestions are a nicety: the row still works while they load or if
 	// they fail.
@@ -99,6 +106,7 @@ function AccountLedger({ account }: { account: Account }) {
 
 	const props = {
 		account,
+		accounts,
 		categories: categories.data,
 		payees: payees.data ?? [],
 	};
@@ -112,23 +120,27 @@ function AccountLedger({ account }: { account: Account }) {
 
 type LedgerProps = {
 	account: Account;
+	accounts: Account[];
 	categories: Category[];
 	payees: Payee[];
 };
 
-function Entry({ account, categories, payees }: LedgerProps) {
+function Entry({ account, accounts, categories, payees }: LedgerProps) {
 	const create = useCreateTransaction();
+	const transfer = useCreateTransfer();
 	return (
 		<EntryRow
 			accountId={account.id}
 			categories={categories}
 			payees={payees}
+			accounts={accounts.filter((a) => a.id !== account.id)}
 			onSave={create.mutateAsync}
+			onSaveTransfer={transfer.mutateAsync}
 		/>
 	);
 }
 
-function Ledger({ account, categories, payees }: LedgerProps) {
+function Ledger({ account, accounts, categories, payees }: LedgerProps) {
 	const transactions = useTransactions(account.id);
 	const update = useUpdateTransaction();
 	const remove = useDeleteTransaction();
@@ -151,6 +163,7 @@ function Ledger({ account, categories, payees }: LedgerProps) {
 			<TransactionTable
 				transactions={transactions.data}
 				categories={categories}
+				accounts={accounts}
 				payees={payees}
 				onUpdate={(before, input) => update.mutateAsync({ before, input })}
 				onDelete={(tx) => remove.mutate(tx)}

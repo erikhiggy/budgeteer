@@ -9,6 +9,8 @@ import type {
 	Payee,
 	Transaction,
 	TransactionInput,
+	Transfer,
+	TransferInput,
 } from './types';
 
 /** A non-2xx response. `message` is the server's user-facing error text. */
@@ -100,6 +102,8 @@ export const api = {
 		request<Transaction>('PATCH', `/api/transactions/${id}`, input),
 	deleteTransaction: (id: number) =>
 		request<void>('DELETE', `/api/transactions/${id}`),
+	createTransfer: (input: TransferInput) =>
+		request<Transfer>('POST', '/api/transfers', input),
 
 	listPayees: () => request<Payee[]>('GET', '/api/payees'),
 };

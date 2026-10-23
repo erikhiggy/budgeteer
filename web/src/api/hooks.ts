@@ -117,9 +117,13 @@ export function usePayees() {
  * lists, the balances, and the payees. Only queries currently on screen
  * refetch (TanStack's default refetchType: 'active').
  */
-function invalidateTransactions(qc: QueryClient, ...accountIds: number[]) {
+function invalidateTransactions(
+	qc: QueryClient,
+	...accountIds: (number | null)[]
+) {
+	const ids = new Set(accountIds.filter((id) => id !== null));
 	return Promise.all([
-		...[...new Set(accountIds)].map((id) =>
+		...[...ids].map((id) =>
 			qc.invalidateQueries({ queryKey: queryKeys.transactions(id) }),
 		),
 		qc.invalidateQueries({ queryKey: queryKeys.accounts }),
@@ -145,9 +149,15 @@ export function useUpdateTransaction() {
 			before: Transaction;
 			input: TransactionInput;
 		}) => api.updateTransaction(before.id, input),
-		// Moving a transaction changes both accounts' lists.
+		// Moving a transaction changes both accounts' lists, and editing a
+		// transfer leg changes the other leg too.
 		onSuccess: (tx, { before }) =>
-			invalidateTransactions(qc, before.account_id, tx.account_id),
+			invalidateTransactions(
+				qc,
+				before.account_id,
+				tx.account_id,
+				before.transfer_account_id,
+			),
 	});
 }
 
@@ -155,6 +165,17 @@ export function useDeleteTransaction() {
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: (tx: Transaction) => api.deleteTransaction(tx.id),
-		onSuccess: (_, tx) => invalidateTransactions(qc, tx.account_id),
+		// Deleting a transfer leg deletes the other leg too.
+		onSuccess: (_, tx) =>
+			invalidateTransactions(qc, tx.account_id, tx.transfer_account_id),
+	});
+}
+
+export function useCreateTransfer() {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: api.createTransfer,
+		onSuccess: (transfer) =>
+			invalidateTransactions(qc, ...transfer.legs.map((leg) => leg.account_id)),
 	});
 }

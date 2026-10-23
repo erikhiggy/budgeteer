@@ -1,7 +1,7 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import type { Category, Payee, Transaction } from '../../api/types';
+import type { Account, Category, Payee, Transaction } from '../../api/types';
 import { todayISO } from '../../lib/date';
 import { EntryRow } from './EntryRow';
 
@@ -303,6 +303,8 @@ describe('EntryRow in edit mode', () => {
 		payee: 'Landlord',
 		amount_cents: 150000,
 		note: 'October',
+		transfer_id: null,
+		transfer_account_id: null,
 	};
 
 	function setupEdit(onSave = vi.fn().mockResolvedValue(undefined)) {
@@ -357,5 +359,139 @@ describe('EntryRow in edit mode', () => {
 		await user.type(field('Note'), '!{Escape}');
 		expect(onCancel).toHaveBeenCalledTimes(1);
 		expect(field('Note')).toHaveValue('October!');
+	});
+});
+
+describe('EntryRow transfers', () => {
+	const others: Account[] = [
+		{ id: 9, name: 'Savings', type: 'savings', balance_cents: 0 },
+		{ id: 10, name: 'Visa', type: 'credit', balance_cents: 0 },
+	];
+
+	function setupTransfer() {
+		const user = userEvent.setup();
+		const onSave = vi.fn().mockResolvedValue(undefined);
+		const onSaveTransfer = vi.fn().mockResolvedValue(undefined);
+		render(
+			<EntryRow
+				accountId={7}
+				categories={categories}
+				payees={payees}
+				accounts={others}
+				onSave={onSave}
+				onSaveTransfer={onSaveTransfer}
+			/>,
+		);
+		return { user, onSave, onSaveTransfer, field: screen.getByLabelText };
+	}
+
+	it('offers the other accounts under Transfer and saves a transfer', async () => {
+		const { user, onSave, onSaveTransfer, field } = setupTransfer();
+		const group = screen.getByRole('group', { name: 'Transfer' });
+		expect(
+			within(group)
+				.getAllByRole('option')
+				.map((o) => o.textContent),
+		).toEqual(['⇄ Savings', '⇄ Visa']);
+
+		await user.type(field('Payee'), 'Rainy day');
+		await user.selectOptions(field('Category'), '⇄ Savings');
+		await user.type(field('Amount'), '200{Enter}');
+
+		expect(onSave).not.toHaveBeenCalled();
+		// A plain number is money out of this account, into Savings.
+		expect(onSaveTransfer).toHaveBeenCalledWith({
+			account_id: 7,
+			other_account_id: 9,
+			date: todayISO(),
+			payee: 'Rainy day',
+			amount_cents: -20000,
+			note: '',
+		});
+		await waitFor(() => expect(field('Category')).toHaveValue(''));
+	});
+
+	it('a + amount is money in from the other account', async () => {
+		const { user, onSaveTransfer, field } = setupTransfer();
+		await user.selectOptions(field('Category'), '⇄ Visa');
+		await user.type(field('Amount'), '+50{Enter}');
+		expect(onSaveTransfer).toHaveBeenCalledWith(
+			expect.objectContaining({ other_account_id: 10, amount_cents: 5000 }),
+		);
+	});
+
+	it('mentions transfers when the category is missing', async () => {
+		const { user, field } = setupTransfer();
+		await user.type(field('Amount'), '5{Enter}');
+		expect(screen.getByRole('alert')).toHaveTextContent(
+			'Pick a category or a transfer',
+		);
+	});
+
+	it('editing a leg keeps the other account fixed and saves both legs through onSave', async () => {
+		const user = userEvent.setup();
+		const onSave = vi.fn().mockResolvedValue(undefined);
+		const leg: Transaction = {
+			id: 50,
+			account_id: 7,
+			category_id: null,
+			date: '2026-10-01',
+			payee: 'Rainy day',
+			amount_cents: -20000,
+			note: '',
+			transfer_id: 3,
+			transfer_account_id: 9,
+		};
+		render(
+			<EntryRow
+				accountId={7}
+				categories={categories}
+				payees={payees}
+				accounts={others}
+				onSave={onSave}
+				initial={leg}
+				onCancel={() => {}}
+			/>,
+		);
+		const select = screen.getByLabelText('Category');
+		expect(select).toBeDisabled();
+		expect(select).toHaveValue('transfer:9');
+		expect(screen.getAllByRole('option', { name: /⇄/ })).toHaveLength(1);
+
+		await user.clear(screen.getByLabelText('Amount'));
+		await user.type(screen.getByLabelText('Amount'), '250{Enter}');
+		expect(onSave).toHaveBeenCalledWith({
+			account_id: 7,
+			category_id: null,
+			date: '2026-10-01',
+			payee: 'Rainy day',
+			amount_cents: -25000,
+			note: '',
+		});
+	});
+
+	it('editing an ordinary transaction offers no transfers', () => {
+		render(
+			<EntryRow
+				accountId={7}
+				categories={categories}
+				payees={payees}
+				accounts={others}
+				onSave={vi.fn()}
+				onSaveTransfer={vi.fn()}
+				initial={{
+					id: 51,
+					account_id: 7,
+					category_id: 3,
+					date: '2026-10-01',
+					payee: '',
+					amount_cents: -100,
+					note: '',
+					transfer_id: null,
+					transfer_account_id: null,
+				}}
+			/>,
+		);
+		expect(screen.queryByRole('group', { name: 'Transfer' })).toBeNull();
 	});
 });

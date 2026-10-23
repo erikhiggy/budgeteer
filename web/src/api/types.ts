@@ -53,10 +53,36 @@ export type Transaction = {
 	/** Negative = money out, positive = money in. */
 	amount_cents: number;
 	note: string;
+	/** Set on both legs of a transfer; null on ordinary transactions. */
+	transfer_id: number | null;
+	/** The other leg's account. */
+	transfer_account_id: number | null;
 };
 
-/** Used for both POST and PATCH; a transaction PATCH takes the full body. */
-export type TransactionInput = Omit<Transaction, 'id'>;
+/**
+ * Used for both POST and PATCH; a transaction PATCH takes the full body.
+ * PATCH on a transfer leg updates both legs.
+ */
+export type TransactionInput = Omit<
+	Transaction,
+	'id' | 'transfer_id' | 'transfer_account_id'
+>;
+
+/**
+ * POST /api/transfers, written from account_id's side: negative amount_cents
+ * is money out of account_id into other_account_id, positive is money in.
+ */
+export type TransferInput = {
+	account_id: number;
+	other_account_id: number;
+	date: string;
+	payee: string;
+	amount_cents: number;
+	note: string;
+};
+
+/** legs[0] is in the request's account_id. */
+export type Transfer = { id: number; legs: [Transaction, Transaction] };
 
 /** A payee and the category of its most recent transaction. */
 export type Payee = {
