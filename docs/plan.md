@@ -21,8 +21,8 @@ The API contract lives in [`api.md`](api.md).
 | M2 Transactions view | Done |
 | M3 Transfers | Done |
 | M4 Goals | Done |
-| M5 Charts | Next |
-| M6 Polish | Not started |
+| M5 Charts | Done |
+| M6 Polish | Next |
 
 ## Decisions
 
@@ -58,10 +58,10 @@ budgeteer/
     ├── vite.config.ts          # /api proxy, Vitest (jsdom)
     └── src/
         ├── api/                # types.ts (mirrors api.md), client.ts, hooks.ts
-        ├── components/         # CategorySelect, PayeeCombobox, ConfirmButton, Notice, Button.module.css
-        ├── lib/                # money, date, month, cx (+ tests)
+        ├── components/         # CategorySelect, PayeeCombobox, ConfirmButton, MonthPicker, Notice, Button.module.css
+        ├── lib/                # money, date, month, cx, chartColors (+ tests)
         ├── styles/             # reset, tokens (CSS variables), global
-        └── views/              # transactions/, categories/, goals/, later charts/
+        └── views/              # transactions/, categories/, goals/, charts/
 ```
 
 - **Dev:** `make dev` runs the Go API against `./dev.db` and Vite on :5173, which proxies `/api` to Go. `make reset-dev` deletes the dev database, and refuses while :7420 is in use.
@@ -113,7 +113,7 @@ See [`api.md`](api.md) for request and response shapes. Planned routes:
 | `GET /api/payees`: `[{payee, category_id}]` with the latest category per payee | M2 ✓ |
 | `POST /api/transfers`; editing and deleting a leg through `/api/transactions/{id}` applies to the whole transfer | M3 ✓ |
 | `GET /api/goals?month=` (cap, spent, carryover, available per expense category), `PUT /api/goals/{category_id}?month=`, `rollover_since` on category `PATCH` | M4 ✓ |
-| `GET /api/reports/spending-by-category?month=`, `GET /api/reports/monthly-spending?from=&to=` | M5 |
+| `GET /api/reports/spending-by-category?month=`, `GET /api/reports/monthly-spending?from=&to=` | M5 ✓ |
 
 ## Frontend
 
@@ -140,7 +140,12 @@ See [`api.md`](api.md) for request and response shapes. Planned routes:
   - A "since Aug 2026" label when the cap comes from an earlier month.
   - A rollover toggle per category, starting from the month on screen. Rollover rows measure against available instead of the cap, and show the carryover, e.g. "+200.00 rolled over" or "−35.00 from last month".
   - An "Uncategorized" row when the month has uncategorized spending.
-- **Charts (M5):** spending by category (horizontal bars), 12-month trend (bars), and goal vs. actual (grouped bars). The month picker is in the URL. The palette lives in `lib/chartColors.ts`.
+- **Charts (M5):**
+  - Route `/charts/:month`, with the same `MonthPicker` as Goals. The view is lazy-loaded, since Recharts is about half the bundle.
+  - Spending by category: horizontal bars, biggest first, amount at each tip, "Uncategorized" as its own bar.
+  - Last 12 months: a column per month ending at the URL month, the selected month solid and the rest lighter. Clicking a column goes to that month.
+  - Goal vs. actual: from `GET /api/goals`, grouped bars of goal and spent for each category with a cap or rollover. The goal is available when rollover applies, otherwise the cap, as on the Goals progress bar.
+  - Colors are tokens (`--color-chart-1`, `--color-chart-2`, `--color-chart-grid`) used through `lib/chartColors.ts`; the pair was checked for colorblind separation and 3:1 contrast. Axis ticks come from `niceTicks` in `views/charts/chartData.ts`.
 - **Styling:**
   - Every color, spacing and type value is a variable in `tokens.css`.
   - `global.css` has the base look for form controls.
@@ -157,17 +162,15 @@ Each milestone is runnable on its own and ends with `make test` passing.
 | **M2 Transactions view** ✓ | Edit and delete everywhere, 409 when deleting something in use, `PayeeCombobox` (rule 3) and `/api/payees`, category autofill, sidebar with balances, opening balance | Component tests for rule 3 and the Esc order. Ten rows entered without the mouse |
 | **M3 Transfers** ✓ | 0002, transfer endpoints, "Transfer to…", legs edit and delete together | A transfer moves both balances and leaves spending unchanged |
 | **M4 Goals** ✓ | 0003, goals endpoints, rollover, Goals view | A cap set in Oct and changed in Dec: Nov shows the Oct cap. A $100 rollover category from Oct with no spending shows $300 available in Dec, and overspending in Nov lowers it |
-| **M5 Charts** | Report endpoints, three charts | Report totals equal the `/api/goals` spent values |
+| **M5 Charts** ✓ | Report endpoints, three charts | Report totals equal the `/api/goals` spent values |
 | **M6 Polish** | `--version`, README, dev-script cleanup | A fresh clone builds with `make build` |
 
-## Next up: M5 Charts
+## Next up: M6 Polish
 
-Start a branch `feat/m5`. The milestones so far each went: contract in `api.md` first, settle open decisions with the user, then backend, frontend, tests, a browser check against a scratch database, and `plan.md` updated to mark the milestone done.
+Start a branch `feat/m6`. The scope is in the milestones table: `--version`, a README, and dev-script cleanup. Done when a fresh clone builds with `make build`.
 
-- **Reuse the goals spending.** `spendingByMonth` in `internal/store/goals.go` already computes spending per category and month, leaves out transfer legs, and puts uncategorized spending under category 0. The reports should be built on it, which is what makes "report totals equal the `/api/goals` spent values" true by construction.
-- **Expense categories only**, as in the derived numbers above. Refunds reduce spending, so a month can come out negative.
-- **Goal vs. actual** compares spending with the cap (`cap_cents`), or with available for rollover categories. That's a decision for the M5 contract.
-- **Open questions for the contract:** whether charts include "Uncategorized"; how the 12-month trend picks its range (ending at the month in the URL?); whether income gets any chart (the plan says spending only); and the URL (`/charts/:month`, like Goals).
+- **Open questions:** where the version comes from (a `-ldflags -X` set by `make build` from `git describe`, or a constant); what the README covers (install, dev, where the database lives, backups by copying the file); and which dev-script cleanup is wanted.
+- **Charts were checked by screenshot only.** Hovering for tooltips and clicking a trend column weren't tried in a real browser in M5, so check them by hand.
 
 ## Risks and notes
 
