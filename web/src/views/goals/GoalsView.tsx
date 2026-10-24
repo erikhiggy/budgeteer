@@ -1,14 +1,8 @@
 import { Navigate, useNavigate, useParams } from 'react-router';
 import { useGoals, useSetGoal, useUpdateCategory } from '../../api/hooks';
-import buttons from '../../components/Button.module.css';
+import { MonthPicker } from '../../components/MonthPicker';
 import { Notice } from '../../components/Notice';
-import { cx } from '../../lib/cx';
-import {
-	addMonths,
-	currentMonth,
-	formatMonth,
-	isISOMonth,
-} from '../../lib/month';
+import { currentMonth, isISOMonth } from '../../lib/month';
 import { GoalsTable } from './GoalsTable';
 import styles from './GoalsView.module.css';
 
@@ -27,39 +21,10 @@ function MonthGoals({ month }: { month: string }) {
 	const goals = useGoals(month);
 	const setGoal = useSetGoal();
 	const updateCategory = useUpdateCategory();
-	const today = currentMonth();
-	const go = (m: string) => navigate(`/goals/${m}`);
 
 	return (
 		<section className={styles.view}>
-			<div className={styles.picker}>
-				<button
-					type='button'
-					className={cx(buttons.quiet, styles.step)}
-					aria-label='Previous month'
-					onClick={() => go(addMonths(month, -1))}
-				>
-					‹
-				</button>
-				<h2 className={styles.month}>{formatMonth(month)}</h2>
-				<button
-					type='button'
-					className={cx(buttons.quiet, styles.step)}
-					aria-label='Next month'
-					onClick={() => go(addMonths(month, 1))}
-				>
-					›
-				</button>
-				{month !== today && (
-					<button
-						type='button'
-						className={cx(buttons.quiet, buttons.small)}
-						onClick={() => go(today)}
-					>
-						This month
-					</button>
-				)}
-			</div>
+			<MonthPicker month={month} onChange={(m) => navigate(`/goals/${m}`)} />
 
 			{goals.isPending && <Notice>Loading goals…</Notice>}
 			{goals.isError && (

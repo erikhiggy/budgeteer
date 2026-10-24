@@ -17,6 +17,12 @@
 	--color-invalid: #c2412d;
 	--color-focus: #3b82c4;
 
+	/* Charts (see lib/chartColors.ts). Slots 1–2 of a validated categorical
+	   palette: both clear 3:1 on the surface and stay apart under CVD. */
+	--color-chart-1: #2a78d6;
+	--color-chart-2: #eb6834;
+	--color-chart-grid: #ecece8;
+
 	/* Spacing (4px scale) */
 	--space-1: 4px;
 	--space-2: 8px;
