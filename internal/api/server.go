@@ -52,6 +52,8 @@ func New(db *sql.DB, dist fs.FS) http.Handler {
 	mux.HandleFunc("POST /api/transfers", h.createTransfer)
 	mux.HandleFunc("GET /api/goals", h.listGoals)
 	mux.HandleFunc("PUT /api/goals/{category_id}", h.setGoal)
+	mux.HandleFunc("GET /api/reports/spending-by-category", h.spendingByCategory)
+	mux.HandleFunc("GET /api/reports/monthly-spending", h.monthlySpending)
 
 	// Keep unknown API paths from falling through to the frontend.
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
