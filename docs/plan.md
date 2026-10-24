@@ -22,7 +22,7 @@ The API contract lives in [`api.md`](api.md).
 | M3 Transfers | Done |
 | M4 Goals | Done |
 | M5 Charts | Done |
-| M6 Polish | Next |
+| M6 Polish | Done |
 
 ## Decisions
 
@@ -46,8 +46,9 @@ These are settled and shouldn't be reopened without a reason.
 
 ```
 budgeteer/
-├── Makefile                    # dev, reset-dev, build, test, fmt, clean
-├── cmd/budgeteer/main.go       # flags: --addr (127.0.0.1:7420), --db
+├── Makefile                    # help, dev, reset-dev, build, test, fmt, clean
+├── README.md                   # setup, usage, backups
+├── cmd/budgeteer/main.go       # flags: --addr (127.0.0.1:7420), --db, --version
 ├── docs/                       # this plan, api.md
 ├── internal/
 │   ├── db/                     # open + pragmas, migration runner, migrations/*.sql
@@ -163,14 +164,17 @@ Each milestone is runnable on its own and ends with `make test` passing.
 | **M3 Transfers** ✓ | 0002, transfer endpoints, "Transfer to…", legs edit and delete together | A transfer moves both balances and leaves spending unchanged |
 | **M4 Goals** ✓ | 0003, goals endpoints, rollover, Goals view | A cap set in Oct and changed in Dec: Nov shows the Oct cap. A $100 rollover category from Oct with no spending shows $300 available in Dec, and overspending in Nov lowers it |
 | **M5 Charts** ✓ | Report endpoints, three charts | Report totals equal the `/api/goals` spent values |
-| **M6 Polish** | `--version`, README, dev-script cleanup | A fresh clone builds with `make build` |
+| **M6 Polish** ✓ | `--version`, README, dev-script cleanup | A fresh clone builds with `make build` |
 
-## Next up: M6 Polish
+## Next up
 
-Start a branch `feat/m6`. The scope is in the milestones table: `--version`, a README, and dev-script cleanup. Done when a fresh clone builds with `make build`.
+All the planned milestones are done. New work comes from "Later" below; give
+each item a milestone in the table, with the same loop as before: contract in
+`api.md` first, then backend, frontend, tests, and a browser check against a
+scratch database.
 
-- **Open questions:** where the version comes from (a `-ldflags -X` set by `make build` from `git describe`, or a constant); what the README covers (install, dev, where the database lives, backups by copying the file); and which dev-script cleanup is wanted.
-- **Charts were checked by screenshot only.** Hovering for tooltips and clicking a trend column weren't tried in a real browser in M5, so check them by hand.
+- **Versions:** `make build` stamps `--version` from `git describe --tags --always --dirty`, so it's a commit hash until the first tag. Tag a release with `git tag v1.0.0`.
+- **Still to check by hand:** chart tooltips and clicking a trend column (M5 was checked by screenshot only).
 
 ## Risks and notes
 

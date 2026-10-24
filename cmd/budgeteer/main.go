@@ -20,10 +20,20 @@ import (
 	"budgeteer/web"
 )
 
+// version is set by `make build` (-ldflags "-X main.version=..."), from git
+// describe. Plain `go run` and `go build` leave it as "dev".
+var version = "dev"
+
 func main() {
 	addr := flag.String("addr", "127.0.0.1:7420", "address to listen on (keep it on loopback)")
 	dbPath := flag.String("db", "", "SQLite database file (default ~/Library/Application Support/Budgeteer/budget.db)")
+	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("budgeteer", version)
+		return
+	}
 
 	if err := run(*addr, *dbPath); err != nil {
 		log.Fatal(err)
@@ -60,6 +70,7 @@ func run(addr, dbPath string) error {
 		Handler:           api.New(conn, web.Dist()),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+	log.Printf("budgeteer %s", version)
 	log.Printf("database: %s", dbPath)
 	log.Printf("listening on http://%s", ln.Addr())
 
