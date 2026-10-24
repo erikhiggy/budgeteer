@@ -207,6 +207,39 @@ type Payee = { payee: string; category_id: number | null }
 - Transfer legs are left out (M3). Their category is always `null`, so they'd only clutter autofill.
 - The frontend filters the list as you type. There's no `?q=`, since years of manual entry stay small (see "No pagination" in the plan).
 
+## Reports (M5)
+
+```ts
+type CategorySpending = {
+  category_id: number | null      // null = uncategorized
+  name: string                    // "Uncategorized" when category_id is null
+  spent_cents: number
+}
+type SpendingByCategory = {
+  month: string                   // "YYYY-MM", echoed or defaulted
+  categories: CategorySpending[]  // nonzero spending only, biggest first
+  total_cents: number             // sum of spent_cents
+}
+type MonthSpending = { month: string; spent_cents: number }
+type MonthlySpending = {
+  from: string                    // "YYYY-MM", as sent
+  to: string
+  months: MonthSpending[]         // every month from..to, oldest first
+}
+```
+
+| Request | Success | Errors |
+|---|---|---|
+| `GET /api/reports/spending-by-category?month=2026-10` | 200, `SpendingByCategory` | 400 invalid `month` |
+| `GET /api/reports/monthly-spending?from=2025-11&to=2026-10` | 200, `MonthlySpending` | 400 missing or invalid `from`/`to`, `from` after `to`, or more than 120 months |
+
+- **Spending** means the same as in Goals: expense categories only, refunds reduce it, and transfer legs never count. Uncategorized money out counts, as its own entry.
+- These match `GET /api/goals` for the same month: each category's `spent_cents` equals its goal's `spent_cents`, the uncategorized entry equals `uncategorized_cents`, and a month's total in either report is the sum of both.
+- `month` on `spending-by-category` is optional and defaults to the current month, like Goals.
+- `categories` leaves out entries with zero spending. A negative entry (refunds bigger than spending) is kept. Sorted by `spent_cents` descending, then name (case-insensitive).
+- `from` and `to` are both required on `monthly-spending`, inclusive, and may be equal. Months with no spending are included with `0`, so the frontend can draw a bar per month.
+- There's no goal vs. actual endpoint: the Charts view uses `GET /api/goals`, which already has the cap, available and spent.
+
 ## Hints, if you want them
 
 - The M1 handlers are the pattern: an input struct with `validate()`, a store method, and `writeStoreError`. The test helpers `doJSON`, `decode[T]`, `wantStatus` (api) and `newTestStore`, `wantKind` (store) are ready to use.
