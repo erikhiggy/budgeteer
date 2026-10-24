@@ -124,3 +124,28 @@ export type Goals = {
 	/** Uncategorized spending in the month, not counting transfers. */
 	uncategorized_cents: number;
 };
+
+export type CategorySpending = {
+	/** null = uncategorized. */
+	category_id: number | null;
+	/** "Uncategorized" when category_id is null. */
+	name: string;
+	spent_cents: number;
+};
+
+export type SpendingByCategory = {
+	/** "YYYY-MM" */
+	month: string;
+	/** Nonzero spending only, biggest first. */
+	categories: CategorySpending[];
+	total_cents: number;
+};
+
+export type MonthSpending = { month: string; spent_cents: number };
+
+export type MonthlySpending = {
+	from: string;
+	to: string;
+	/** Every month from..to, oldest first, with 0 when nothing was spent. */
+	months: MonthSpending[];
+};

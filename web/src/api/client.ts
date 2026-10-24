@@ -8,7 +8,9 @@ import type {
 	DateRange,
 	Goal,
 	Goals,
+	MonthlySpending,
 	Payee,
+	SpendingByCategory,
 	Transaction,
 	TransactionInput,
 	Transfer,
@@ -116,4 +118,16 @@ export const api = {
 		request<Goal>('PUT', `/api/goals/${categoryId}${query({ month })}`, {
 			amount_cents: amountCents,
 		}),
+
+	spendingByCategory: (month: string) =>
+		request<SpendingByCategory>(
+			'GET',
+			`/api/reports/spending-by-category${query({ month })}`,
+		),
+	/** from and to are "YYYY-MM", inclusive. */
+	monthlySpending: (from: string, to: string) =>
+		request<MonthlySpending>(
+			'GET',
+			`/api/reports/monthly-spending${query({ from, to })}`,
+		),
 };

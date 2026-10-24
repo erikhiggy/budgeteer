@@ -20,6 +20,12 @@ export const queryKeys = {
 	/** Every month's goals, for invalidating all of them at once. */
 	allGoals: ['goals'] as const,
 	goals: (month: string) => ['goals', month] as const,
+	/** Every report, for invalidating all of them at once. */
+	allReports: ['reports'] as const,
+	spendingByCategory: (month: string) =>
+		['reports', 'by-category', month] as const,
+	monthlySpending: (from: string, to: string) =>
+		['reports', 'monthly', from, to] as const,
 };
 
 export function createQueryClient() {
@@ -131,16 +137,19 @@ function invalidateTransactions(
 		),
 		qc.invalidateQueries({ queryKey: queryKeys.accounts }),
 		qc.invalidateQueries({ queryKey: queryKeys.payees }),
-		// Spending feeds every month's goals from then on, through rollover.
+		// Spending feeds every month's goals from then on, through rollover,
+		// and the reports.
 		qc.invalidateQueries({ queryKey: queryKeys.allGoals }),
+		qc.invalidateQueries({ queryKey: queryKeys.allReports }),
 	]);
 }
 
-/** Categories are also the rows of every month's goals. */
+/** Categories are also the rows of every month's goals and reports. */
 function invalidateCategories(qc: QueryClient) {
 	return Promise.all([
 		qc.invalidateQueries({ queryKey: queryKeys.categories }),
 		qc.invalidateQueries({ queryKey: queryKeys.allGoals }),
+		qc.invalidateQueries({ queryKey: queryKeys.allReports }),
 	]);
 }
 
@@ -214,5 +223,19 @@ export function useSetGoal() {
 		}) => api.setGoal(categoryId, month, amountCents),
 		// A cap applies from its month on, and rolls into later months.
 		onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.allGoals }),
+	});
+}
+
+export function useSpendingByCategory(month: string) {
+	return useQuery({
+		queryKey: queryKeys.spendingByCategory(month),
+		queryFn: () => api.spendingByCategory(month),
+	});
+}
+
+export function useMonthlySpending(from: string, to: string) {
+	return useQuery({
+		queryKey: queryKeys.monthlySpending(from, to),
+		queryFn: () => api.monthlySpending(from, to),
 	});
 }
