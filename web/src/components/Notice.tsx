@@ -8,7 +8,7 @@ type Props = {
 };
 
 /** A one-line loading, empty, or error message. */
-export function Notice({ tone = 'info', children }: Props) {
+export const Notice = ({ tone = 'info', children }: Props) => {
 	return (
 		<p
 			className={cx(styles.notice, tone === 'error' && styles.error)}
@@ -17,4 +17,4 @@ export function Notice({ tone = 'info', children }: Props) {
 			{children}
 		</p>
 	);
-}
+};

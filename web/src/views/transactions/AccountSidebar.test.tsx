@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Account } from '../../api/types';
 import { AccountSidebar } from './AccountSidebar';
 
-function account(overrides: Partial<Account>): Account {
+const account = (overrides: Partial<Account>): Account => {
 	return {
 		id: 1,
 		name: 'Checking',
@@ -12,15 +12,15 @@ function account(overrides: Partial<Account>): Account {
 		balance_cents: 0,
 		...overrides,
 	};
-}
+};
 
-function setup(accounts: Account[]) {
+const setup = (accounts: Account[]) => {
 	render(
 		<MemoryRouter>
 			<AccountSidebar accounts={accounts} onNewAccount={vi.fn()} />
 		</MemoryRouter>,
 	);
-}
+};
 
 const group = (label: string) => screen.getByRole('region', { name: label });
 

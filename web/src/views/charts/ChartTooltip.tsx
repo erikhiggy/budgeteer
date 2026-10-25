@@ -4,7 +4,7 @@ import styles from './ChartsView.module.css';
 type Line = { label: string; value: string; color?: string };
 
 /** The hover box for every chart: a title and label/value lines. */
-export function ChartTooltip({
+export const ChartTooltip = ({
 	title,
 	lines,
 	footer,
@@ -12,7 +12,7 @@ export function ChartTooltip({
 	title: string;
 	lines: Line[];
 	footer?: ReactNode;
-}) {
+}) => {
 	return (
 		<div className={styles.tooltip}>
 			<div className={styles.tooltipTitle}>{title}</div>
@@ -28,4 +28,4 @@ export function ChartTooltip({
 			{footer && <div className={styles.tooltipFooter}>{footer}</div>}
 		</div>
 	);
-}
+};

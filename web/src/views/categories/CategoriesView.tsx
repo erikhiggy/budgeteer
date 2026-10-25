@@ -13,7 +13,7 @@ import { cx } from '../../lib/cx';
 import styles from './CategoriesView.module.css';
 
 /** Route: /categories. Add, rename, move between spending and income, delete. */
-export function CategoriesView() {
+export const CategoriesView = () => {
 	const categories = useCategories();
 
 	return (
@@ -41,9 +41,9 @@ export function CategoriesView() {
 			)}
 		</section>
 	);
-}
+};
 
-function AddCategoryForm() {
+const AddCategoryForm = () => {
 	const [name, setName] = useState('');
 	const [isIncome, setIsIncome] = useState(false);
 	const create = useCreateCategory();
@@ -90,9 +90,9 @@ function AddCategoryForm() {
 			)}
 		</form>
 	);
-}
+};
 
-function CategoryList({
+const CategoryList = ({
 	title,
 	categories,
 	empty,
@@ -100,7 +100,7 @@ function CategoryList({
 	title: string;
 	categories: Category[];
 	empty: string;
-}) {
+}) => {
 	return (
 		<div className={styles.list}>
 			<h2 className={styles.heading}>{title}</h2>
@@ -115,9 +115,9 @@ function CategoryList({
 			)}
 		</div>
 	);
-}
+};
 
-function CategoryItem({ category }: { category: Category }) {
+const CategoryItem = ({ category }: { category: Category }) => {
 	const [renaming, setRenaming] = useState(false);
 	const update = useUpdateCategory();
 	const remove = useDeleteCategory();
@@ -178,15 +178,15 @@ function CategoryItem({ category }: { category: Category }) {
 			)}
 		</li>
 	);
-}
+};
 
-function RenameForm({
+const RenameForm = ({
 	category,
 	onDone,
 }: {
 	category: Category;
 	onDone: () => void;
-}) {
+}) => {
 	const [name, setName] = useState(category.name);
 	const update = useUpdateCategory();
 
@@ -234,4 +234,4 @@ function RenameForm({
 			)}
 		</form>
 	);
-}
+};

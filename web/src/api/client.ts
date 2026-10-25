@@ -28,11 +28,11 @@ export class ApiError extends Error {
 	}
 }
 
-async function request<T>(
+const request = async <T>(
 	method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
 	path: string,
 	body?: unknown,
-): Promise<T> {
+): Promise<T> => {
 	const init: RequestInit = { method };
 	if (method !== 'GET') {
 		// The server rejects mutations without this header (see guard in
@@ -52,32 +52,32 @@ async function request<T>(
 		throw new ApiError(res.status, message);
 	}
 	return data as T;
-}
+};
 
-function safeParse(text: string): unknown {
+const safeParse = (text: string): unknown => {
 	try {
 		return JSON.parse(text);
 	} catch {
 		return undefined;
 	}
-}
+};
 
-function isErrorBody(v: unknown): v is { error: string } {
+const isErrorBody = (v: unknown): v is { error: string } => {
 	return (
 		typeof v === 'object' &&
 		v !== null &&
 		typeof (v as { error?: unknown }).error === 'string'
 	);
-}
+};
 
-function query(params: Record<string, string | number | undefined>): string {
+const query = (params: Record<string, string | number | undefined>): string => {
 	const q = new URLSearchParams();
 	for (const [k, v] of Object.entries(params)) {
 		if (v !== undefined && v !== '') q.set(k, String(v));
 	}
 	const s = q.toString();
 	return s ? `?${s}` : '';
-}
+};
 
 export const api = {
 	listAccounts: () => request<Account[]>('GET', '/api/accounts'),

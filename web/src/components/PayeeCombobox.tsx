@@ -19,7 +19,7 @@ type Props = {
 const MAX_SUGGESTIONS = 8;
 
 /** Payees containing the typed text, those that start with it first. */
-export function matchPayees(payees: Payee[], text: string): Payee[] {
+export const matchPayees = (payees: Payee[], text: string): Payee[] => {
 	const q = text.trim().toLowerCase();
 	if (q === '') return [];
 	const starts: Payee[] = [];
@@ -32,7 +32,7 @@ export function matchPayees(payees: Payee[], text: string): Payee[] {
 		else if (name.includes(q)) contains.push(p);
 	}
 	return [...starts, ...contains].slice(0, MAX_SUGGESTIONS);
-}
+};
 
 /**
  * The payee field with suggestions from past transactions (ARIA combobox
@@ -44,7 +44,7 @@ export function matchPayees(payees: Payee[], text: string): Payee[] {
  *   - Esc closes the list if it's open; otherwise it reaches the row, which
  *     clears.
  */
-export function PayeeCombobox({
+export const PayeeCombobox = ({
 	value,
 	onChange,
 	payees,
@@ -53,7 +53,7 @@ export function PayeeCombobox({
 	onBlur,
 	className,
 	ref,
-}: Props) {
+}: Props) => {
 	const listId = useId();
 	const [open, setOpen] = useState(false);
 	const [highlight, setHighlight] = useState(-1);
@@ -62,18 +62,18 @@ export function PayeeCombobox({
 	const shown = matches.length > 0;
 	const optionId = (i: number) => `${listId}-${i}`;
 
-	function close() {
+	const close = () => {
 		setOpen(false);
 		setHighlight(-1);
-	}
+	};
 
-	function pick(p: Payee) {
+	const pick = (p: Payee) => {
 		onChange(p.payee);
 		onPick(p);
 		close();
-	}
+	};
 
-	function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+	const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
 		if (e.nativeEvent.isComposing) return;
 		switch (e.key) {
 			case 'ArrowDown':
@@ -108,7 +108,7 @@ export function PayeeCombobox({
 				close();
 				break;
 		}
-	}
+	};
 
 	return (
 		<div className={cx(styles.combobox, className)}>
@@ -165,4 +165,4 @@ export function PayeeCombobox({
 			</ul>
 		</div>
 	);
-}
+};

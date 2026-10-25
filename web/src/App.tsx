@@ -11,7 +11,7 @@ const ChartsView = lazy(() =>
 	import('./views/charts/ChartsView').then((m) => ({ default: m.ChartsView })),
 );
 
-export function App() {
+export const App = () => {
 	return (
 		<BrowserRouter>
 			<div className={styles.shell}>
@@ -47,9 +47,9 @@ export function App() {
 			</div>
 		</BrowserRouter>
 	);
-}
+};
 
-function Tab({ to, children }: { to: string; children: string }) {
+const Tab = ({ to, children }: { to: string; children: string }) => {
 	return (
 		<NavLink
 			to={to}
@@ -58,4 +58,4 @@ function Tab({ to, children }: { to: string; children: string }) {
 			{children}
 		</NavLink>
 	);
-}
+};

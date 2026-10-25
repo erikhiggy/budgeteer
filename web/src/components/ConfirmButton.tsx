@@ -22,14 +22,14 @@ const ARMED_MS = 4000;
  * "Confirm", the second confirms. Leaving it (blur) or waiting
  * a few seconds disarms it.
  */
-export function ConfirmButton({
+export const ConfirmButton = ({
 	onConfirm,
 	children,
 	confirmLabel = 'Confirm',
 	'aria-label': ariaLabel,
 	disabled,
 	className,
-}: Props) {
+}: Props) => {
 	const [armed, setArmed] = useState(false);
 
 	useEffect(() => {
@@ -62,4 +62,4 @@ export function ConfirmButton({
 			{armed ? confirmLabel : children}
 		</button>
 	);
-}
+};

@@ -8,7 +8,7 @@ import {
 	trendRange,
 } from './chartData';
 
-function goal(over: Partial<Goal>): Goal {
+const goal = (over: Partial<Goal>): Goal => {
 	return {
 		category_id: 1,
 		name: 'Food',
@@ -20,7 +20,7 @@ function goal(over: Partial<Goal>): Goal {
 		spent_cents: 0,
 		...over,
 	};
-}
+};
 
 describe('trendRange', () => {
 	it('covers the 12 months ending at the month', () => {

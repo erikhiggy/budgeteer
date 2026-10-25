@@ -10,7 +10,7 @@ type Props = {
 	onCancel?: () => void;
 };
 
-export function AddAccountForm({ onCreated, onCancel }: Props) {
+export const AddAccountForm = ({ onCreated, onCancel }: Props) => {
 	const [name, setName] = useState('');
 	const [type, setType] = useState<AccountType>('checking');
 	const [balance, setBalance] = useState('');
@@ -93,4 +93,4 @@ export function AddAccountForm({ onCreated, onCancel }: Props) {
 			)}
 		</form>
 	);
-}
+};

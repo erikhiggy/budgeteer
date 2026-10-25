@@ -17,7 +17,7 @@ const payees: Payee[] = [
 	{ payee: 'Landlord', category_id: 4 },
 ];
 
-function setup(onSave = vi.fn().mockResolvedValue(undefined)) {
+const setup = (onSave = vi.fn().mockResolvedValue(undefined)) => {
 	const user = userEvent.setup();
 	render(
 		<EntryRow
@@ -29,9 +29,9 @@ function setup(onSave = vi.fn().mockResolvedValue(undefined)) {
 	);
 	const field = (name: string) => screen.getByLabelText(name);
 	return { user, onSave, field };
-}
+};
 
-function deferred() {
+const deferred = () => {
 	let resolve!: () => void;
 	let reject!: (err: Error) => void;
 	const promise = new Promise<void>((res, rej) => {
@@ -39,7 +39,7 @@ function deferred() {
 		reject = rej;
 	});
 	return { promise, resolve, reject };
-}
+};
 
 describe('EntryRow', () => {
 	it('rule 1: Enter on an incomplete row sends nothing and focuses the first missing field', async () => {
@@ -307,7 +307,7 @@ describe('EntryRow in edit mode', () => {
 		transfer_account_id: null,
 	};
 
-	function setupEdit(onSave = vi.fn().mockResolvedValue(undefined)) {
+	const setupEdit = (onSave = vi.fn().mockResolvedValue(undefined)) => {
 		const user = userEvent.setup();
 		const onCancel = vi.fn();
 		render(
@@ -321,7 +321,7 @@ describe('EntryRow in edit mode', () => {
 			/>,
 		);
 		return { user, onSave, onCancel, field: screen.getByLabelText };
-	}
+	};
 
 	it('starts from the transaction and saves every field with Enter', async () => {
 		const { user, onSave, field } = setupEdit();
@@ -368,7 +368,7 @@ describe('EntryRow transfers', () => {
 		{ id: 10, name: 'Visa', type: 'credit', balance_cents: 0 },
 	];
 
-	function setupTransfer() {
+	const setupTransfer = () => {
 		const user = userEvent.setup();
 		const onSave = vi.fn().mockResolvedValue(undefined);
 		const onSaveTransfer = vi.fn().mockResolvedValue(undefined);
@@ -383,7 +383,7 @@ describe('EntryRow transfers', () => {
 			/>,
 		);
 		return { user, onSave, onSaveTransfer, field: screen.getByLabelText };
-	}
+	};
 
 	it('offers the other accounts under Transfer and saves a transfer', async () => {
 		const { user, onSave, onSaveTransfer, field } = setupTransfer();

@@ -20,22 +20,22 @@ type Props = {
 const TRANSFER_PREFIX = 'transfer:';
 
 /** The select value for a transfer to or from account id. */
-export function transferValue(accountId: number): string {
+export const transferValue = (accountId: number): string => {
 	return TRANSFER_PREFIX + accountId;
-}
+};
 
 /** The account id in a transfer value, or null for a category or ''. */
-export function transferAccountId(value: string): number | null {
+export const transferAccountId = (value: string): number | null => {
 	return value.startsWith(TRANSFER_PREFIX)
 		? Number(value.slice(TRANSFER_PREFIX.length))
 		: null;
-}
+};
 
 /**
  * Native select (keeps type-to-jump and Tab) grouped into expense and
  * income categories, plus transfer targets when given.
  */
-export function CategorySelect({
+export const CategorySelect = ({
 	categories,
 	value,
 	onChange,
@@ -44,7 +44,7 @@ export function CategorySelect({
 	disabled,
 	className,
 	ref,
-}: Props) {
+}: Props) => {
 	const expense = categories.filter((c) => !c.is_income);
 	const income = categories.filter((c) => c.is_income);
 
@@ -88,4 +88,4 @@ export function CategorySelect({
 			)}
 		</select>
 	);
-}
+};

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Goal } from '../../api/types';
 import { GoalsTable } from './GoalsTable';
 
-function goal(overrides: Partial<Goal>): Goal {
+const goal = (overrides: Partial<Goal>): Goal => {
 	return {
 		category_id: 1,
 		name: 'Groceries',
@@ -16,9 +16,9 @@ function goal(overrides: Partial<Goal>): Goal {
 		spent_cents: 0,
 		...overrides,
 	};
-}
+};
 
-function setup(goals: Goal[], uncategorizedCents = 0) {
+const setup = (goals: Goal[], uncategorizedCents = 0) => {
 	const user = userEvent.setup();
 	const onSetCap = vi.fn().mockResolvedValue(undefined);
 	const onSetRollover = vi.fn().mockResolvedValue(undefined);
@@ -32,7 +32,7 @@ function setup(goals: Goal[], uncategorizedCents = 0) {
 		/>,
 	);
 	return { user, onSetCap, onSetRollover };
-}
+};
 
 const row = (name: string) =>
 	screen.getByText(name, { selector: 'div' }).closest('tr') as HTMLElement;

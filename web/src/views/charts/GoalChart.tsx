@@ -15,7 +15,7 @@ import { compactDollars, niceTicks, type GoalRow } from './chartData';
 const ROW = 52;
 
 /** A pair of bars per category: the goal, then what was spent. */
-export function GoalChart({ rows }: { rows: GoalRow[] }) {
+export const GoalChart = ({ rows }: { rows: GoalRow[] }) => {
 	const longest = Math.max(...rows.map((r) => r.name.length));
 	const values = rows.flatMap((r) => [r.goalCents, r.spentCents]);
 	const ticks = niceTicks(Math.min(...values), Math.max(...values));
@@ -107,4 +107,4 @@ export function GoalChart({ rows }: { rows: GoalRow[] }) {
 			/>
 		</BarChart>
 	);
-}
+};

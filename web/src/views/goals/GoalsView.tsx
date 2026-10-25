@@ -7,16 +7,16 @@ import { GoalsTable } from './GoalsTable';
 import styles from './GoalsView.module.css';
 
 /** Route: /goals/:month. Goes to the current month when none (or a bad one) is given. */
-export function GoalsView() {
+export const GoalsView = () => {
 	const { month } = useParams();
 	if (!month || !isISOMonth(month)) {
 		return <Navigate to={`/goals/${currentMonth()}`} replace />;
 	}
 	// Keyed so a cap being edited doesn't follow you to another month.
 	return <MonthGoals key={month} month={month} />;
-}
+};
 
-function MonthGoals({ month }: { month: string }) {
+const MonthGoals = ({ month }: { month: string }) => {
 	const navigate = useNavigate();
 	const goals = useGoals(month);
 	const setGoal = useSetGoal();
@@ -49,4 +49,4 @@ function MonthGoals({ month }: { month: string }) {
 			</p>
 		</section>
 	);
-}
+};

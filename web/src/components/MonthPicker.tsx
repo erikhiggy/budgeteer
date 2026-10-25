@@ -10,7 +10,7 @@ type Props = {
 };
 
 /** ‹ October 2026 ›, plus "This month" when another month is showing. */
-export function MonthPicker({ month, onChange }: Props) {
+export const MonthPicker = ({ month, onChange }: Props) => {
 	const today = currentMonth();
 	return (
 		<div className={styles.picker}>
@@ -42,4 +42,4 @@ export function MonthPicker({ month, onChange }: Props) {
 			)}
 		</div>
 	);
-}
+};
