@@ -23,7 +23,7 @@ The API contract lives in [`api.md`](api.md).
 | M4 Goals | Done |
 | M5 Charts | Done |
 | M6 Polish | Done |
-| M7 Investment accounts | In progress |
+| M7 Investment accounts | Done |
 
 ## Decisions
 
@@ -91,7 +91,7 @@ instead.
   - `transactions.transfer_id` references it with `ON DELETE CASCADE`
   - "A transfer has no category" is enforced in the store, since `ALTER TABLE` can't add a CHECK
 - **0003_goals (M4, done):** `goals(category_id, effective_month 'YYYY-MM', amount_cents NULL)`
-- **0004_investment_accounts (M7):** rebuilds `accounts` to add `investment` to the type CHECK, since SQLite can't change a CHECK in place. Ids are kept, so transactions still point at the same accounts
+- **0004_investment_accounts (M7, done):** rebuilds `accounts` to add `investment` to the type CHECK, since SQLite can't change a CHECK in place. Ids are kept, so transactions still point at the same accounts
   - Primary key is (category_id, effective_month); rows go with their category (`ON DELETE CASCADE`), and moving a category to income deletes them
   - NULL means the cap was removed from that month on
   - `categories.rollover_since 'YYYY-MM' NULL` added with `ALTER TABLE`; NULL means rollover is off
@@ -169,7 +169,7 @@ Each milestone is runnable on its own and ends with `make test` passing.
 | **M4 Goals** ✓ | 0003, goals endpoints, rollover, Goals view | A cap set in Oct and changed in Dec: Nov shows the Oct cap. A $100 rollover category from Oct with no spending shows $300 available in Dec, and overspending in Nov lowers it |
 | **M5 Charts** ✓ | Report endpoints, three charts | Report totals equal the `/api/goals` spent values |
 | **M6 Polish** ✓ | `--version`, README, dev-script cleanup | A fresh clone builds with `make build` |
-| **M7 Investment accounts** | 0004, an `investment` account type (a label only), migrations run with foreign keys off | An existing database migrates with its accounts and transactions intact, and an investment account can be added |
+| **M7 Investment accounts** ✓ | 0004, an `investment` account type (a label only), migrations run with foreign keys off | An existing database migrates with its accounts and transactions intact, and an investment account can be added |
 
 ## Next up
 
