@@ -48,5 +48,4 @@ make help       # list every target
 ```
 
 The code is Go (`cmd/`, `internal/`) with SQLite, and React with TypeScript
-and Vite (`web/`). [`docs/plan.md`](docs/plan.md) has the decisions, schema
-and milestones, and [`docs/api.md`](docs/api.md) is the API contract.
+and Vite (`web/`).
