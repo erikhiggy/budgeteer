@@ -24,6 +24,7 @@ The API contract lives in [`api.md`](api.md).
 | M5 Charts | Done |
 | M6 Polish | Done |
 | M7 Investment accounts | Done |
+| M8 Sidebar groups | In progress |
 
 ## Decisions
 
@@ -139,6 +140,7 @@ See [`api.md`](api.md) for request and response shapes. Planned routes:
   - Category is a native `<select>` grouped into Spending / Income, plus a "Transfer" group listing the other accounts (`⇄ Savings`). A transfer target saves through `POST /api/transfers`.
 - **Table:** inline edit (the entry row in edit mode, same validation and Enter rules), a two-click delete (`ConfirmButton`), and transfer legs shown as "Transfer → X" / "Transfer ← X". Editing a leg keeps its other account fixed.
 - **Accounts:** a sidebar lists accounts with balances and a total. The header above the ledger renames, retypes and deletes the selected account. The add-account form takes an optional opening balance, where a plain number is money you have and `-` is money owed.
+  - **Grouped by type (M8):** the sidebar shows a group per account type, in the order Checking, Savings, Cash, Credit cards, Investments. Each group has a heading with its subtotal, and its accounts are sorted by name, as the API returns them. Types with no accounts are left out. The total at the bottom stays the sum of every account. Frontend only: the API doesn't change.
 - **Goals (M4):**
   - Route `/goals/:month` (`YYYY-MM`), with a month picker at the top.
   - A row per expense category: inline-editable cap (Enter saves, empty removes, Esc cancels), spent, remaining, and a progress bar that turns `--color-over-cap` past 100%.
@@ -170,6 +172,7 @@ Each milestone is runnable on its own and ends with `make test` passing.
 | **M5 Charts** ✓ | Report endpoints, three charts | Report totals equal the `/api/goals` spent values |
 | **M6 Polish** ✓ | `--version`, README, dev-script cleanup | A fresh clone builds with `make build` |
 | **M7 Investment accounts** ✓ | 0004, an `investment` account type (a label only), migrations run with foreign keys off | An existing database migrates with its accounts and transactions intact, and an investment account can be added |
+| **M8 Sidebar groups** | Sidebar grouped by account type, with a subtotal per group | Accounts of every type show under the right heading with correct subtotals, and empty types are hidden. AccountSidebar component test |
 
 ## Next up
 
