@@ -30,7 +30,7 @@ These apply to every `PATCH` and `DELETE` below.
 Code: `internal/store/accounts.go`, `internal/api/accounts.go`, and their tests. The M1 routes are the reference pattern for the rest of the API.
 
 ```ts
-type Account = { id: number; name: string; type: 'checking' | 'savings' | 'credit' | 'cash'; balance_cents: number }
+type Account = { id: number; name: string; type: 'checking' | 'savings' | 'credit' | 'cash' | 'investment'; balance_cents: number }
 ```
 
 | Request | Success | Errors |
