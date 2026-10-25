@@ -9,7 +9,7 @@ import (
 )
 
 // AccountTypes are the values the accounts.type CHECK constraint allows.
-var AccountTypes = []string{"checking", "savings", "credit", "cash"}
+var AccountTypes = []string{"checking", "savings", "credit", "cash", "investment"}
 
 type Account struct {
 	ID           int64  `json:"id"`

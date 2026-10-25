@@ -63,6 +63,15 @@ func TestCreateAccountErrors(t *testing.T) {
 	}
 }
 
+func TestCreateInvestmentAccount(t *testing.T) {
+	h := newTestServer(t, builtDist)
+	res, raw := doJSON(t, h, "POST", "/api/accounts", map[string]any{"name": "Brokerage", "type": "investment", "opening_balance_cents": 1250000})
+	wantStatus(t, res, raw, http.StatusCreated)
+	if a := decode[store.Account](t, raw); a.Type != "investment" || a.BalanceCents != 1250000 {
+		t.Errorf("created = %+v, want an investment account with balance 1250000", a)
+	}
+}
+
 func TestCreateAccountWithOpeningBalance(t *testing.T) {
 	h := newTestServer(t, builtDist)
 	res, raw := doJSON(t, h, "POST", "/api/accounts", map[string]any{"name": "Visa", "type": "credit", "opening_balance_cents": -50000})

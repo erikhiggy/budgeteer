@@ -54,8 +54,27 @@ func Migrate(ctx context.Context, db *sql.DB, fsys fs.FS) error {
 	return nil
 }
 
-func apply(ctx context.Context, db *sql.DB, version int, body string) error {
-	tx, err := db.BeginTx(ctx, nil)
+// apply runs one migration with foreign keys off, so it can rebuild a table
+// that other tables reference. SQLite ignores PRAGMA foreign_keys inside a
+// transaction, so it's set on a pinned connection around the transaction,
+// and foreign_key_check stands in for the checks that were skipped.
+func apply(ctx context.Context, db *sql.DB, version int, body string) (err error) {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys = OFF"); err != nil {
+		return err
+	}
+	defer func() {
+		if _, onErr := conn.ExecContext(ctx, "PRAGMA foreign_keys = ON"); onErr != nil && err == nil {
+			err = onErr
+		}
+	}()
+
+	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -64,11 +83,32 @@ func apply(ctx context.Context, db *sql.DB, version int, body string) error {
 	if _, err := tx.ExecContext(ctx, body); err != nil {
 		return err
 	}
+	if err := checkForeignKeys(ctx, tx); err != nil {
+		return err
+	}
 	// PRAGMA does not accept bound parameters; version is an int we parsed.
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", version)); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+func checkForeignKeys(ctx context.Context, tx *sql.Tx) error {
+	rows, err := tx.QueryContext(ctx, "PRAGMA foreign_key_check")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		var table, parent string
+		var rowid sql.NullInt64
+		var fkid int
+		if err := rows.Scan(&table, &rowid, &parent, &fkid); err != nil {
+			return err
+		}
+		return fmt.Errorf("foreign key violation: a row in %s points at a missing %s row", table, parent)
+	}
+	return rows.Err()
 }
 
 func parseVersion(name string) (int, error) {

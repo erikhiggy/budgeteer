@@ -35,6 +35,28 @@ func userVersion(t *testing.T, db *sql.DB) int {
 	return v
 }
 
+// upTo returns the first n embedded migrations.
+func upTo(t *testing.T, n int) fstest.MapFS {
+	t.Helper()
+	migrations, err := fs.Sub(embedded, "migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	names, err := fs.Glob(migrations, "*.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := fstest.MapFS{}
+	for _, name := range names[:n] {
+		data, err := fs.ReadFile(migrations, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m[name] = &fstest.MapFile{Data: data}
+	}
+	return m
+}
+
 func TestOpenSetsPragmas(t *testing.T) {
 	db := openTemp(t)
 
@@ -122,6 +144,51 @@ func TestMigrateRollsBackFailedMigration(t *testing.T) {
 	}
 	if n != 0 {
 		t.Error("table b exists after failed migration")
+	}
+}
+
+func TestMigrateRunsWithForeignKeysOff(t *testing.T) {
+	db := openTemp(t)
+	fsys := fstest.MapFS{
+		"0001_a.sql": {Data: []byte("CREATE TABLE a (id INTEGER PRIMARY KEY); CREATE TABLE b (a_id INTEGER REFERENCES a (id) ON DELETE RESTRICT); INSERT INTO a (id) VALUES (1); INSERT INTO b VALUES (1);")},
+		// Rebuilding a referenced table only works with foreign keys off.
+		"0002_rebuild.sql": {Data: []byte("CREATE TABLE a_new (id INTEGER PRIMARY KEY); INSERT INTO a_new SELECT id FROM a; DROP TABLE a; ALTER TABLE a_new RENAME TO a;")},
+	}
+	if err := Migrate(context.Background(), db, fsys); err != nil {
+		t.Fatal(err)
+	}
+
+	var fk int
+	if err := db.QueryRow("PRAGMA foreign_keys").Scan(&fk); err != nil {
+		t.Fatal(err)
+	}
+	if fk != 1 {
+		t.Errorf("foreign_keys = %d after migrating, want 1", fk)
+	}
+	if _, err := db.Exec("DELETE FROM a"); err == nil {
+		t.Error("deleting a referenced row succeeded, want the RESTRICT to hold after the rebuild")
+	}
+}
+
+func TestMigrateRejectsForeignKeyViolation(t *testing.T) {
+	db := openTemp(t)
+	fsys := fstest.MapFS{
+		"0001_a.sql":   {Data: []byte("CREATE TABLE a (id INTEGER PRIMARY KEY); CREATE TABLE b (a_id INTEGER REFERENCES a (id)); INSERT INTO a (id) VALUES (1); INSERT INTO b VALUES (1);")},
+		"0002_bad.sql": {Data: []byte("DELETE FROM a;")},
+	}
+	err := Migrate(context.Background(), db, fsys)
+	if err == nil || !strings.Contains(err.Error(), "foreign key violation") {
+		t.Fatalf("err = %v, want a foreign key violation", err)
+	}
+	if v := userVersion(t, db); v != 1 {
+		t.Errorf("user_version = %d, want 1", v)
+	}
+	var n int
+	if err := db.QueryRow("SELECT count(*) FROM a").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Errorf("rows in a = %d, want the delete rolled back", n)
 	}
 }
 
@@ -215,34 +282,15 @@ func TestTransfersMigrationKeepsExistingData(t *testing.T) {
 func TestGoalsMigrationKeepsExistingData(t *testing.T) {
 	db := openTemp(t)
 	ctx := context.Background()
-	migrations, err := fs.Sub(embedded, "migrations")
-	if err != nil {
-		t.Fatal(err)
-	}
-	upTo := func(n int) fstest.MapFS {
-		names, err := fs.Glob(migrations, "*.sql")
-		if err != nil {
-			t.Fatal(err)
-		}
-		m := fstest.MapFS{}
-		for _, name := range names[:n] {
-			data, err := fs.ReadFile(migrations, name)
-			if err != nil {
-				t.Fatal(err)
-			}
-			m[name] = &fstest.MapFile{Data: data}
-		}
-		return m
-	}
 
 	// A database from before M4, with a category in use.
-	if err := Migrate(ctx, db, upTo(2)); err != nil {
+	if err := Migrate(ctx, db, upTo(t, 2)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`INSERT INTO categories (name) VALUES ('Coffee')`); err != nil {
 		t.Fatal(err)
 	}
-	if err := Migrate(ctx, db, upTo(3)); err != nil {
+	if err := Migrate(ctx, db, upTo(t, 3)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -267,5 +315,52 @@ func TestGoalsMigrationKeepsExistingData(t *testing.T) {
 	}
 	if n != 0 {
 		t.Errorf("%d goals left after deleting the category, want 0", n)
+	}
+}
+
+func TestInvestmentAccountsMigrationKeepsExistingData(t *testing.T) {
+	db := openTemp(t)
+	ctx := context.Background()
+
+	// A database from before M7, with a transfer between two accounts.
+	if err := Migrate(ctx, db, upTo(t, 3)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO accounts (id, name, type) VALUES (3, 'Checking', 'checking'), (7, 'Visa', 'credit')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO transfers (id) VALUES (1)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO transactions (account_id, date, amount_cents, transfer_id) VALUES (3, '2026-10-02', -100, 1), (7, '2026-10-02', 100, 1)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO accounts (name, type) VALUES ('Brokerage', 'investment')`); err == nil {
+		t.Fatal("investment account accepted before 0004")
+	}
+
+	if err := Migrate(ctx, db, upTo(t, 4)); err != nil {
+		t.Fatal(err)
+	}
+
+	var got string
+	if err := db.QueryRow(`SELECT group_concat(row, ' ') FROM (SELECT a.name || ':' || a.type || ':' || t.amount_cents AS row FROM transactions t JOIN accounts a ON a.id = t.account_id ORDER BY t.id)`).Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if want := "Checking:checking:-100 Visa:credit:100"; got != want {
+		t.Errorf("transactions joined to accounts = %q, want %q", got, want)
+	}
+
+	if _, err := db.Exec(`INSERT INTO accounts (name, type) VALUES ('Brokerage', 'investment')`); err != nil {
+		t.Errorf("investment account: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO accounts (name, type) VALUES ('Piggy', 'piggy')`); err == nil {
+		t.Error("unknown type accepted after 0004")
+	}
+	if _, err := db.Exec(`INSERT INTO accounts (name, type) VALUES ('checking', 'cash')`); err == nil {
+		t.Error("case-insensitive duplicate name accepted after 0004")
+	}
+	if _, err := db.Exec(`DELETE FROM accounts WHERE id = 3`); err == nil {
+		t.Error("deleted an account with transactions, want the RESTRICT to hold")
 	}
 }
