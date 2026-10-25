@@ -24,7 +24,7 @@ The API contract lives in [`api.md`](api.md).
 | M5 Charts | Done |
 | M6 Polish | Done |
 | M7 Investment accounts | Done |
-| M8 Sidebar groups | In progress |
+| M8 Sidebar groups | Done |
 
 ## Decisions
 
@@ -172,7 +172,7 @@ Each milestone is runnable on its own and ends with `make test` passing.
 | **M5 Charts** ✓ | Report endpoints, three charts | Report totals equal the `/api/goals` spent values |
 | **M6 Polish** ✓ | `--version`, README, dev-script cleanup | A fresh clone builds with `make build` |
 | **M7 Investment accounts** ✓ | 0004, an `investment` account type (a label only), migrations run with foreign keys off | An existing database migrates with its accounts and transactions intact, and an investment account can be added |
-| **M8 Sidebar groups** | Sidebar grouped by account type, with a subtotal per group | Accounts of every type show under the right heading with correct subtotals, and empty types are hidden. AccountSidebar component test |
+| **M8 Sidebar groups** ✓ | Sidebar grouped by account type, with a subtotal per group | Accounts of every type show under the right heading with correct subtotals, and empty types are hidden. AccountSidebar component test |
 
 ## Next up
 
