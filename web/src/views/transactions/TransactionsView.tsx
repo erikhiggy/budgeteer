@@ -20,7 +20,7 @@ import { TransactionTable } from './TransactionTable';
 import styles from './TransactionsView.module.css';
 
 /** Route: /transactions/:accountId. Picks the first account when none is given. */
-export function TransactionsView() {
+export const TransactionsView = () => {
 	const { accountId } = useParams();
 	const navigate = useNavigate();
 	const accounts = useAccounts();
@@ -81,15 +81,15 @@ export function TransactionsView() {
 			</section>
 		</div>
 	);
-}
+};
 
-function AccountLedger({
+const AccountLedger = ({
 	account,
 	accounts,
 }: {
 	account: Account;
 	accounts: Account[];
-}) {
+}) => {
 	const categories = useCategories();
 	// Suggestions are a nicety: the row still works while they load or if
 	// they fail.
@@ -116,7 +116,7 @@ function AccountLedger({
 			<Ledger {...props} />
 		</>
 	);
-}
+};
 
 type LedgerProps = {
 	account: Account;
@@ -125,7 +125,7 @@ type LedgerProps = {
 	payees: Payee[];
 };
 
-function Entry({ account, accounts, categories, payees }: LedgerProps) {
+const Entry = ({ account, accounts, categories, payees }: LedgerProps) => {
 	const create = useCreateTransaction();
 	const transfer = useCreateTransfer();
 	return (
@@ -138,9 +138,9 @@ function Entry({ account, accounts, categories, payees }: LedgerProps) {
 			onSaveTransfer={transfer.mutateAsync}
 		/>
 	);
-}
+};
 
-function Ledger({ account, accounts, categories, payees }: LedgerProps) {
+const Ledger = ({ account, accounts, categories, payees }: LedgerProps) => {
 	const transactions = useTransactions(account.id);
 	const update = useUpdateTransaction();
 	const remove = useDeleteTransaction();
@@ -170,4 +170,4 @@ function Ledger({ account, accounts, categories, payees }: LedgerProps) {
 			/>
 		</>
 	);
-}
+};

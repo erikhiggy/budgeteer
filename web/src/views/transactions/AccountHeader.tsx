@@ -14,7 +14,7 @@ type Props = {
 };
 
 /** The selected account's name and balance, with rename and delete. */
-export function AccountHeader({ account, onDeleted }: Props) {
+export const AccountHeader = ({ account, onDeleted }: Props) => {
 	const [editing, setEditing] = useState(false);
 	const remove = useDeleteAccount();
 
@@ -58,15 +58,15 @@ export function AccountHeader({ account, onDeleted }: Props) {
 			)}
 		</div>
 	);
-}
+};
 
-function EditAccountForm({
+const EditAccountForm = ({
 	account,
 	onDone,
 }: {
 	account: Account;
 	onDone: () => void;
-}) {
+}) => {
 	const [name, setName] = useState(account.name);
 	const [type, setType] = useState<AccountType>(account.type);
 	const update = useUpdateAccount();
@@ -119,4 +119,4 @@ function EditAccountForm({
 			)}
 		</form>
 	);
-}
+};

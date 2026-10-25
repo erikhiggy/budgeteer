@@ -22,13 +22,13 @@ type Props = {
  * progress bar, and a rollover toggle. Rollover rows measure spending
  * against available (cap plus carryover) instead of the cap alone.
  */
-export function GoalsTable({
+export const GoalsTable = ({
 	month,
 	goals,
 	uncategorizedCents,
 	onSetCap,
 	onSetRollover,
-}: Props) {
+}: Props) => {
 	return (
 		<table className={styles.table}>
 			<thead>
@@ -78,9 +78,9 @@ export function GoalsTable({
 			</tbody>
 		</table>
 	);
-}
+};
 
-function GoalRow({
+const GoalRow = ({
 	month,
 	goal: g,
 	onSetCap,
@@ -90,7 +90,7 @@ function GoalRow({
 	goal: Goal;
 	onSetCap: (cents: number | null) => Promise<unknown>;
 	onSetRollover: (since: string | null) => Promise<unknown>;
-}) {
+}) => {
 	const [editing, setEditing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -108,7 +108,7 @@ function GoalRow({
 					? Infinity
 					: 0;
 
-	async function run(action: Promise<unknown>) {
+	const run = async (action: Promise<unknown>) => {
 		setError(null);
 		try {
 			await action;
@@ -117,7 +117,7 @@ function GoalRow({
 			setError(err instanceof Error ? err.message : String(err));
 			return false;
 		}
-	}
+	};
 
 	return (
 		<>
@@ -198,10 +198,10 @@ function GoalRow({
 			)}
 		</>
 	);
-}
+};
 
 /** The small print under a category's name: where the cap and carryover come from. */
-function Details({
+const Details = ({
 	goal: g,
 	month,
 	rolling,
@@ -209,7 +209,7 @@ function Details({
 	goal: Goal;
 	month: string;
 	rolling: boolean;
-}) {
+}) => {
 	const notes: string[] = [];
 	if (g.cap_since !== null && g.cap_since < month) {
 		notes.push(`since ${formatMonthShort(g.cap_since)}`);
@@ -225,10 +225,10 @@ function Details({
 	}
 	if (notes.length === 0) return null;
 	return <div className={styles.detail}>{notes.join(' · ')}</div>;
-}
+};
 
 /** Inline cap input: Enter saves (empty removes the cap), Esc cancels. */
-function CapEditor({
+const CapEditor = ({
 	goal,
 	onSave,
 	onCancel,
@@ -238,12 +238,12 @@ function CapEditor({
 	onSave: (cents: number | null) => void;
 	onCancel: () => void;
 	onInvalid: (message: string) => void;
-}) {
+}) => {
 	const [value, setValue] = useState(
 		goal.cap_cents === null ? '' : formatCents(goal.cap_cents),
 	);
 
-	function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+	const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
 		if (e.nativeEvent.isComposing) return;
 		if (e.key === 'Enter') {
 			e.preventDefault();
@@ -255,7 +255,7 @@ function CapEditor({
 			e.preventDefault();
 			onCancel();
 		}
-	}
+	};
 
 	return (
 		<input
@@ -271,4 +271,4 @@ function CapEditor({
 			onBlur={onCancel}
 		/>
 	);
-}
+};

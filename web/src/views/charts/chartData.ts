@@ -2,9 +2,9 @@ import type { Goal } from '../../api/types';
 import { addMonths } from '../../lib/month';
 
 /** The trend's 12 months, ending at month (inclusive). */
-export function trendRange(month: string): { from: string; to: string } {
+export const trendRange = (month: string): { from: string; to: string } => {
 	return { from: addMonths(month, -11), to: month };
-}
+};
 
 export type GoalRow = {
 	categoryId: number;
@@ -20,7 +20,7 @@ export type GoalRow = {
  * the same number the Goals progress bar uses. Categories with no cap and no
  * rollover are left out. Keeps the goals' order (by name).
  */
-export function goalRows(goals: Goal[], month: string): GoalRow[] {
+export const goalRows = (goals: Goal[], month: string): GoalRow[] => {
 	return goals.flatMap((g) =>
 		g.available_cents === null
 			? []
@@ -34,7 +34,7 @@ export function goalRows(goals: Goal[], month: string): GoalRow[] {
 					},
 				],
 	);
-}
+};
 
 const shortMonth = new Intl.DateTimeFormat('en-US', {
 	month: 'short',
@@ -42,14 +42,14 @@ const shortMonth = new Intl.DateTimeFormat('en-US', {
 });
 
 /** Axis label for a trend bar: "Nov", with the year on January ("Jan ’27"). */
-export function monthTick(month: string): string {
+export const monthTick = (month: string): string => {
 	const [y, m] = month.split('-').map(Number);
 	const name = shortMonth.format(new Date(Date.UTC(y, m - 1, 1)));
 	return m === 1 ? `${name} ’${String(y).slice(2)}` : name;
-}
+};
 
 /** Axis tick in whole dollars, compact from 1,000: 0, 250, 1K, 1.5K, 12K. */
-export function compactDollars(cents: number): string {
+export const compactDollars = (cents: number): string => {
 	const dollars = cents / 100;
 	const abs = Math.abs(dollars);
 	const sign = dollars < 0 ? '−' : '';
@@ -60,13 +60,13 @@ export function compactDollars(cents: number): string {
 		(k < 10 ? String(Math.round(k * 10) / 10) : String(Math.round(k))) +
 		'K'
 	);
-}
+};
 
 /**
  * Round axis ticks in cents covering min..max (and 0), at most about five
  * steps of 1, 2, 2.5 or 5 × a power of ten dollars.
  */
-export function niceTicks(min: number, max: number): number[] {
+export const niceTicks = (min: number, max: number): number[] => {
 	const lo = Math.min(0, min);
 	const hi = Math.max(0, max);
 	if (lo === hi) return [0];
@@ -78,4 +78,4 @@ export function niceTicks(min: number, max: number): number[] {
 		ticks.push(t);
 	}
 	return ticks;
-}
+};

@@ -27,25 +27,25 @@ type Props = {
 
 const COLUMNS = 6;
 
-export function TransactionTable({
+export const TransactionTable = ({
 	transactions,
 	categories,
 	accounts,
 	payees,
 	onUpdate,
 	onDelete,
-}: Props) {
+}: Props) => {
 	const categoryName = new Map(categories.map((c) => [c.id, c.name]));
 	const accountName = new Map(accounts.map((a) => [a.id, a.name]));
 
-	function categoryCell(tx: Transaction): string {
+	const categoryCell = (tx: Transaction): string => {
 		if (tx.transfer_account_id !== null) {
 			const other = accountName.get(tx.transfer_account_id) ?? '—';
 			return `Transfer ${tx.amount_cents < 0 ? '→' : '←'} ${other}`;
 		}
 		if (tx.category_id === null) return 'Uncategorized';
 		return categoryName.get(tx.category_id) ?? '—';
-	}
+	};
 	// One row at a time is open for editing.
 	const [editingId, setEditingId] = useState<number | null>(null);
 
@@ -126,14 +126,14 @@ export function TransactionTable({
 			</tbody>
 		</table>
 	);
-}
+};
 
 /**
  * "Trader Joe's, Oct 5, 2026, 45.67", to tell rows' buttons apart for screen
  * readers.
  */
-function describe(tx: Transaction): string {
+const describe = (tx: Transaction): string => {
 	return [tx.payee, formatDate(tx.date), formatAmount(tx.amount_cents)]
 		.filter(Boolean)
 		.join(', ');
-}
+};

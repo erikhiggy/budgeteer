@@ -21,19 +21,19 @@ const groups: { type: AccountType; label: string }[] = [
 const sum = (accounts: Account[]) =>
 	accounts.reduce((total, a) => total + a.balance_cents, 0);
 
-function Balance({ cents }: { cents: number }) {
+const Balance = ({ cents }: { cents: number }) => {
 	return (
 		<span className={cx(styles.balance, cents < 0 && styles.negative)}>
 			{formatCents(cents)}
 		</span>
 	);
-}
+};
 
 /**
  * Every account with its balance, grouped by type with a subtotal per group;
  * the selected one is the current route.
  */
-export function AccountSidebar({ accounts, onNewAccount }: Props) {
+export const AccountSidebar = ({ accounts, onNewAccount }: Props) => {
 	return (
 		<nav className={styles.sidebar} aria-label='Accounts'>
 			{groups.map(({ type, label }) => {
@@ -76,4 +76,4 @@ export function AccountSidebar({ accounts, onNewAccount }: Props) {
 			</button>
 		</nav>
 	);
-}
+};

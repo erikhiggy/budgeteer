@@ -36,7 +36,7 @@ const transactions: Transaction[] = [
 	},
 ];
 
-function setup() {
+const setup = () => {
 	const user = userEvent.setup();
 	const onUpdate = vi.fn().mockResolvedValue(undefined);
 	const onDelete = vi.fn();
@@ -51,7 +51,7 @@ function setup() {
 		/>,
 	);
 	return { user, onUpdate, onDelete };
-}
+};
 
 describe('TransactionTable', () => {
 	it('edits a row inline and closes the editor after saving', async () => {

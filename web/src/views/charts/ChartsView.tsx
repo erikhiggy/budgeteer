@@ -16,15 +16,15 @@ import { TrendChart } from './TrendChart';
 import styles from './ChartsView.module.css';
 
 /** Route: /charts/:month. Goes to the current month when none (or a bad one) is given. */
-export function ChartsView() {
+export const ChartsView = () => {
 	const { month } = useParams();
 	if (!month || !isISOMonth(month)) {
 		return <Navigate to={`/charts/${currentMonth()}`} replace />;
 	}
 	return <MonthCharts month={month} />;
-}
+};
 
-function MonthCharts({ month }: { month: string }) {
+const MonthCharts = ({ month }: { month: string }) => {
 	const navigate = useNavigate();
 	const go = (m: string) => navigate(`/charts/${m}`);
 	const { from, to } = trendRange(month);
@@ -95,9 +95,9 @@ function MonthCharts({ month }: { month: string }) {
 			</Card>
 		</section>
 	);
-}
+};
 
-function Card({
+const Card = ({
 	title,
 	aside,
 	children,
@@ -105,7 +105,7 @@ function Card({
 	title: string;
 	aside?: ReactNode;
 	children: ReactNode;
-}) {
+}) => {
 	return (
 		<div className={styles.card}>
 			<div className={styles.cardHeader}>
@@ -115,4 +115,4 @@ function Card({
 			{children}
 		</div>
 	);
-}
+};

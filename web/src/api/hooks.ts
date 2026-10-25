@@ -28,7 +28,7 @@ export const queryKeys = {
 		['reports', 'monthly', from, to] as const,
 };
 
-export function createQueryClient() {
+export const createQueryClient = () => {
 	return new QueryClient({
 		defaultOptions: {
 			queries: {
@@ -42,13 +42,13 @@ export function createQueryClient() {
 			},
 		},
 	});
-}
+};
 
-export function useAccounts() {
+export const useAccounts = () => {
 	return useQuery({ queryKey: queryKeys.accounts, queryFn: api.listAccounts });
-}
+};
 
-export function useCreateAccount() {
+export const useCreateAccount = () => {
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: api.createAccount,
@@ -59,77 +59,77 @@ export function useCreateAccount() {
 				qc.invalidateQueries({ queryKey: queryKeys.payees }),
 			]),
 	});
-}
+};
 
-export function useUpdateAccount() {
+export const useUpdateAccount = () => {
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: ({ id, input }: { id: number; input: AccountUpdate }) =>
 			api.updateAccount(id, input),
 		onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.accounts }),
 	});
-}
+};
 
-export function useDeleteAccount() {
+export const useDeleteAccount = () => {
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: api.deleteAccount,
 		onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.accounts }),
 	});
-}
+};
 
-export function useCategories() {
+export const useCategories = () => {
 	return useQuery({
 		queryKey: queryKeys.categories,
 		queryFn: api.listCategories,
 	});
-}
+};
 
-export function useCreateCategory() {
+export const useCreateCategory = () => {
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: api.createCategory,
 		onSuccess: () => invalidateCategories(qc),
 	});
-}
+};
 
-export function useUpdateCategory() {
+export const useUpdateCategory = () => {
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: ({ id, input }: { id: number; input: CategoryUpdate }) =>
 			api.updateCategory(id, input),
 		onSuccess: () => invalidateCategories(qc),
 	});
-}
+};
 
-export function useDeleteCategory() {
+export const useDeleteCategory = () => {
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: api.deleteCategory,
 		onSuccess: () => invalidateCategories(qc),
 	});
-}
+};
 
-export function useTransactions(accountId: number) {
+export const useTransactions = (accountId: number) => {
 	return useQuery({
 		queryKey: queryKeys.transactions(accountId),
 		queryFn: () => api.listTransactions(accountId),
 	});
-}
+};
 
-export function usePayees() {
+export const usePayees = () => {
 	return useQuery({ queryKey: queryKeys.payees, queryFn: api.listPayees });
-}
+};
 
 /**
  * Invalidates what a change to transactions in these accounts touches: their
  * lists, the balances, and the payees. Only queries currently on screen
  * refetch (TanStack's default refetchType: 'active').
  */
-function invalidateTransactions(
+const invalidateTransactions = (
 	qc: QueryClient,
 	...accountIds: (number | null)[]
-) {
+) => {
 	const ids = new Set(accountIds.filter((id) => id !== null));
 	return Promise.all([
 		...[...ids].map((id) =>
@@ -142,26 +142,26 @@ function invalidateTransactions(
 		qc.invalidateQueries({ queryKey: queryKeys.allGoals }),
 		qc.invalidateQueries({ queryKey: queryKeys.allReports }),
 	]);
-}
+};
 
 /** Categories are also the rows of every month's goals and reports. */
-function invalidateCategories(qc: QueryClient) {
+const invalidateCategories = (qc: QueryClient) => {
 	return Promise.all([
 		qc.invalidateQueries({ queryKey: queryKeys.categories }),
 		qc.invalidateQueries({ queryKey: queryKeys.allGoals }),
 		qc.invalidateQueries({ queryKey: queryKeys.allReports }),
 	]);
-}
+};
 
-export function useCreateTransaction() {
+export const useCreateTransaction = () => {
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: api.createTransaction,
 		onSuccess: (tx) => invalidateTransactions(qc, tx.account_id),
 	});
-}
+};
 
-export function useUpdateTransaction() {
+export const useUpdateTransaction = () => {
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: ({
@@ -181,9 +181,9 @@ export function useUpdateTransaction() {
 				before.transfer_account_id,
 			),
 	});
-}
+};
 
-export function useDeleteTransaction() {
+export const useDeleteTransaction = () => {
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: (tx: Transaction) => api.deleteTransaction(tx.id),
@@ -191,25 +191,25 @@ export function useDeleteTransaction() {
 		onSuccess: (_, tx) =>
 			invalidateTransactions(qc, tx.account_id, tx.transfer_account_id),
 	});
-}
+};
 
-export function useCreateTransfer() {
+export const useCreateTransfer = () => {
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: api.createTransfer,
 		onSuccess: (transfer) =>
 			invalidateTransactions(qc, ...transfer.legs.map((leg) => leg.account_id)),
 	});
-}
+};
 
-export function useGoals(month: string) {
+export const useGoals = (month: string) => {
 	return useQuery({
 		queryKey: queryKeys.goals(month),
 		queryFn: () => api.listGoals(month),
 	});
-}
+};
 
-export function useSetGoal() {
+export const useSetGoal = () => {
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: ({
@@ -224,18 +224,18 @@ export function useSetGoal() {
 		// A cap applies from its month on, and rolls into later months.
 		onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.allGoals }),
 	});
-}
+};
 
-export function useSpendingByCategory(month: string) {
+export const useSpendingByCategory = (month: string) => {
 	return useQuery({
 		queryKey: queryKeys.spendingByCategory(month),
 		queryFn: () => api.spendingByCategory(month),
 	});
-}
+};
 
-export function useMonthlySpending(from: string, to: string) {
+export const useMonthlySpending = (from: string, to: string) => {
 	return useQuery({
 		queryKey: queryKeys.monthlySpending(from, to),
 		queryFn: () => api.monthlySpending(from, to),
 	});
-}
+};

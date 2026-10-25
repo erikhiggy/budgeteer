@@ -22,7 +22,7 @@ type Props = {
 };
 
 /** A column per month. Clicking one moves the page to that month. */
-export function TrendChart({ months, selected, onSelect }: Props) {
+export const TrendChart = ({ months, selected, onSelect }: Props) => {
 	const spent = months.map((m) => m.spent_cents);
 	const ticks = niceTicks(Math.min(...spent), Math.max(...spent));
 	return (
@@ -81,4 +81,4 @@ export function TrendChart({ months, selected, onSelect }: Props) {
 			</Bar>
 		</BarChart>
 	);
-}
+};

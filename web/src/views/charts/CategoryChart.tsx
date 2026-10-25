@@ -16,11 +16,11 @@ import { compactDollars, niceTicks } from './chartData';
 const ROW = 32;
 
 /** Horizontal bars, biggest first, with the amount at each bar's tip. */
-export function CategoryChart({
+export const CategoryChart = ({
 	categories,
 }: {
 	categories: CategorySpending[];
-}) {
+}) => {
 	const longest = Math.max(...categories.map((c) => c.name.length));
 	const spent = categories.map((c) => c.spent_cents);
 	const ticks = niceTicks(Math.min(...spent), Math.max(...spent));
@@ -82,4 +82,4 @@ export function CategoryChart({
 			</Bar>
 		</BarChart>
 	);
-}
+};

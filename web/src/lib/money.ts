@@ -12,7 +12,7 @@ const AMOUNT = /^([+-]?)\$?(\d{1,3}(?:,\d{3})+|\d*)(?:\.(\d{0,2}))?$/;
  * going through floating point. A plain number is money out (negative);
  * a leading + is money in. A leading - is accepted and also means out.
  */
-export function parseAmount(input: string): ParsedAmount {
+export const parseAmount = (input: string): ParsedAmount => {
 	const s = input.trim();
 	if (s === '') return { ok: false, error: 'Amount is required' };
 
@@ -27,14 +27,14 @@ export function parseAmount(input: string): ParsedAmount {
 	const cents = Number(whole || '0') * 100 + Number(frac.padEnd(2, '0'));
 	if (cents === 0) return { ok: false, error: ZERO_AMOUNT };
 	return { ok: true, cents: m[1] === '+' ? cents : -cents };
-}
+};
 
 /**
  * Parses an opening balance. Unlike a transaction amount, a plain number is
  * money you have (positive), and a leading - is money owed, e.g. on a credit
  * card. Empty means no opening balance (0).
  */
-export function parseBalance(input: string): ParsedAmount {
+export const parseBalance = (input: string): ParsedAmount => {
 	const s = input.trim();
 	if (s === '') return { ok: true, cents: 0 };
 	const parsed = parseAmount('+' + s.replace(/^[+-]/, ''));
@@ -50,14 +50,14 @@ export function parseBalance(input: string): ParsedAmount {
 		ok: false,
 		error: parsed.error.replace(/^Amount/, 'Opening balance'),
 	};
-}
+};
 
 /** A cap as typed: a positive amount, or empty for no cap (null). */
 export type ParsedCap =
 	{ ok: true; cents: number | null } | { ok: false; error: string };
 
 /** Parses a goal cap. Empty means no cap; zero and negatives are rejected. */
-export function parseCap(input: string): ParsedCap {
+export const parseCap = (input: string): ParsedCap => {
 	const s = input.trim();
 	if (s === '') return { ok: true, cents: null };
 	if (s.startsWith('-')) return { ok: false, error: 'A cap must be positive' };
@@ -70,25 +70,25 @@ export function parseCap(input: string): ParsedCap {
 		};
 	}
 	return { ok: false, error: parsed.error.replace(/^Amount/, 'Cap') };
-}
+};
 
 const MINUS = '−';
 
-function digits(absCents: number): string {
+const digits = (absCents: number): string => {
 	const whole = Math.floor(absCents / 100).toLocaleString('en-US');
 	const frac = String(absCents % 100).padStart(2, '0');
 	return `${whole}.${frac}`;
-}
+};
 
 /** A balance or total with its natural sign: "1,234.56", "−12.00". */
-export function formatCents(cents: number): string {
+export const formatCents = (cents: number): string => {
 	return (cents < 0 ? MINUS : '') + digits(Math.abs(cents));
-}
+};
 
 /**
  * A transaction amount the way it's entered: money out is plain ("12.34"),
  * money in gets a + ("+12.34").
  */
-export function formatAmount(cents: number): string {
+export const formatAmount = (cents: number): string => {
 	return (cents > 0 ? '+' : '') + digits(Math.abs(cents));
-}
+};

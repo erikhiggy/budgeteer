@@ -51,7 +51,7 @@ type Field = 'date' | 'category' | 'amount';
  * missing field without sending anything; Esc clears (or cancels an edit).
  * Enter and Esc go to the payee suggestions first while they're open.
  */
-export function EntryRow({
+export const EntryRow = ({
 	accountId,
 	categories,
 	payees,
@@ -61,7 +61,7 @@ export function EntryRow({
 	initial,
 	onCancel,
 	className,
-}: Props) {
+}: Props) => {
 	const editing = initial !== undefined;
 	const legOf = initial?.transfer_account_id ?? null;
 	// New rows can start a transfer; an existing row can't become one or stop
@@ -104,7 +104,7 @@ export function EntryRow({
 	const parsed = parseAmount(amount);
 
 	/** Tab order, so focus goes to the first problem the user would reach. */
-	function findProblems(category: string): [Field, string][] {
+	const findProblems = (category: string): [Field, string][] => {
 		const found: [Field, string][] = [];
 		if (!isISODate(date)) found.push(['date', 'Date is required']);
 		if (category === '') {
@@ -117,7 +117,7 @@ export function EntryRow({
 		}
 		if (!parsed.ok) found.push(['amount', parsed.error]);
 		return found;
-	}
+	};
 	const problems = findProblems(categoryId);
 
 	const invalid = (field: Field) =>
@@ -125,22 +125,22 @@ export function EntryRow({
 
 	const categoryName = new Map(categories.map((c) => [c.id, c.name]));
 
-	function focusField(field: Field) {
+	const focusField = (field: Field) => {
 		const refs = { date: dateRef, category: categoryRef, amount: amountRef };
 		refs[field].current?.focus();
-	}
+	};
 
 	/** The known payee typed out in full, ignoring case, if any. */
-	function knownPayee(): Payee | undefined {
+	const knownPayee = (): Payee | undefined => {
 		const typed = payee.trim().toLowerCase();
 		return payees.find((p) => p.payee.toLowerCase() === typed);
-	}
+	};
 
 	/**
 	 * Category autofill: a known payee brings its latest category, unless a
 	 * category is already chosen. Returns the category to use.
 	 */
-	function autofill(p: Payee | undefined): string {
+	const autofill = (p: Payee | undefined): string => {
 		if (
 			p?.category_id != null &&
 			categoryId === '' &&
@@ -151,18 +151,18 @@ export function EntryRow({
 			return id;
 		}
 		return categoryId;
-	}
+	};
 
-	function clear() {
+	const clear = () => {
 		setPayee('');
 		setCategoryId('');
 		setAmount('');
 		setNote('');
 		setAttempted(false);
 		setServerError(null);
-	}
+	};
 
-	async function save() {
+	const save = async () => {
 		if (savingRef.current) return;
 		// Enter straight after typing a known payee should count its category,
 		// even though the payee field hasn't lost focus yet.
@@ -204,9 +204,9 @@ export function EntryRow({
 			savingRef.current = false;
 			setSaving(false);
 		}
-	}
+	};
 
-	function onKeyDown(e: KeyboardEvent<HTMLFormElement>) {
+	const onKeyDown = (e: KeyboardEvent<HTMLFormElement>) => {
 		if (e.nativeEvent.isComposing) return;
 		if (e.key === 'Enter') {
 			// Also stops the browser's implicit form submit and button click,
@@ -218,7 +218,7 @@ export function EntryRow({
 			if (editing) onCancel?.();
 			else clear();
 		}
-	}
+	};
 
 	const message = serverError ?? (attempted ? problems[0]?.[1] : undefined);
 
@@ -319,4 +319,4 @@ export function EntryRow({
 			</p>
 		</form>
 	);
-}
+};
