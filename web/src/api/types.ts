@@ -1,12 +1,14 @@
 // Mirrors docs/api.md. Keep the two in sync.
 
-export type AccountType = 'checking' | 'savings' | 'credit' | 'cash';
+export type AccountType =
+	'checking' | 'savings' | 'credit' | 'cash' | 'investment';
 
 export const accountTypes: AccountType[] = [
 	'checking',
 	'savings',
 	'credit',
 	'cash',
+	'investment',
 ];
 
 export type Account = {
