@@ -1,0 +1,84 @@
+.table {
+	width: 100%;
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-md);
+	border-collapse: separate;
+	border-spacing: 0;
+	overflow: hidden;
+}
+
+.table th,
+.table td {
+	padding: var(--space-2) var(--space-3);
+	text-align: left;
+	vertical-align: middle;
+	border-bottom: 1px solid var(--color-border);
+}
+
+.table tbody tr:last-child td {
+	border-bottom: none;
+}
+
+.table th {
+	font-size: var(--text-sm);
+	font-weight: 600;
+	color: var(--color-text-muted);
+	background: var(--color-bg);
+}
+
+.name {
+	font-weight: 500;
+}
+
+.detail {
+	font-size: var(--text-sm);
+	color: var(--color-text-muted);
+}
+
+.money {
+	width: 120px;
+	text-align: right !important;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.assignButton {
+	font-variant-numeric: tabular-nums;
+	color: var(--color-text);
+}
+
+.zero {
+	color: var(--color-text-muted);
+}
+
+.assignInput {
+	width: 100%;
+	height: 26px !important;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.balance {
+	font-weight: 600;
+}
+
+.negative {
+	color: var(--color-over-cap);
+}
+
+.uncategorized td {
+	color: var(--color-text-muted);
+}
+
+.errorRow td {
+	padding-top: 0;
+	font-size: var(--text-sm);
+	color: var(--color-invalid);
+}
+
+.empty {
+	padding: var(--space-6) !important;
+	text-align: center !important;
+	color: var(--color-text-muted);
+}

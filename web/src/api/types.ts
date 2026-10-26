@@ -127,6 +127,37 @@ export type Goals = {
 	uncategorized_cents: number;
 };
 
+export type Envelope = {
+	category_id: number;
+	name: string;
+	/** The month's cap, shown as a target; null = no cap. */
+	cap_cents: number | null;
+	/** Balance from earlier months (negative if overspent). */
+	carryover_cents: number;
+	/** Put in this month; negative takes money out. */
+	assigned_cents: number;
+	spent_cents: number;
+	/** carryover + assigned − spent. */
+	balance_cents: number;
+};
+
+export type Envelopes = {
+	/** "YYYY-MM" */
+	month: string;
+	/** "YYYY-MM" envelopes count from; null = not started. */
+	start_month: string | null;
+	/** Funds through the month minus everything assigned in any month. */
+	ready_to_assign_cents: number;
+	/** The month's income in on-budget accounts. */
+	income_cents: number;
+	/** The month's total assigned. */
+	assigned_cents: number;
+	/** Every expense category, sorted by name. All zeros before the start. */
+	envelopes: Envelope[];
+	/** Uncategorized spending in the month, not counting transfers. */
+	uncategorized_cents: number;
+};
+
 export type CategorySpending = {
 	/** null = uncategorized. */
 	category_id: number | null;

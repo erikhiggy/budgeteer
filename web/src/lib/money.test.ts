@@ -3,6 +3,7 @@ import {
 	formatAmount,
 	formatCents,
 	parseAmount,
+	parseAssigned,
 	parseBalance,
 	parseCap,
 } from './money';
@@ -95,6 +96,26 @@ describe('parseBalance', () => {
 		['-', 'Opening balance must be a number like 12.34'],
 	])('%j → %j', (input, error) => {
 		expect(parseBalance(input)).toEqual({ ok: false, error });
+	});
+});
+
+describe('parseAssigned', () => {
+	it.each([
+		['', 0],
+		['0', 0],
+		['400', 40000],
+		['$1,200.50', 120050],
+		['-25', -2500],
+		['−25.00', -2500],
+	])('%j → %i cents', (input, cents) => {
+		expect(parseAssigned(input)).toEqual({ ok: true, cents });
+	});
+
+	it('names the field in errors', () => {
+		expect(parseAssigned('abc')).toEqual({
+			ok: false,
+			error: 'Assigned must be a number like 12.34',
+		});
 	});
 });
 

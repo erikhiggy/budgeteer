@@ -1,0 +1,81 @@
+.view {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+}
+
+.intro {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: var(--space-3);
+	max-width: 60ch;
+	padding: var(--space-4);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-md);
+}
+
+.actions {
+	display: flex;
+	gap: var(--space-2);
+}
+
+.summary {
+	display: flex;
+	align-items: center;
+	gap: var(--space-6);
+	padding: var(--space-3) var(--space-4);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-md);
+}
+
+.ready {
+	color: var(--color-inflow);
+}
+
+.ready.over {
+	color: var(--color-over-cap);
+}
+
+.readyAmount {
+	font-size: var(--text-lg);
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+}
+
+.label {
+	font-size: var(--text-sm);
+	font-weight: 600;
+}
+
+.totals {
+	display: flex;
+	gap: var(--space-6);
+}
+
+.totals dt {
+	font-size: var(--text-sm);
+	color: var(--color-text-muted);
+}
+
+.totals dd {
+	font-variant-numeric: tabular-nums;
+}
+
+.fill {
+	margin-left: auto;
+}
+
+.footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-4);
+}
+
+.hint {
+	font-size: var(--text-sm);
+	color: var(--color-text-muted);
+}

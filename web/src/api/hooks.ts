@@ -20,6 +20,9 @@ export const queryKeys = {
 	/** Every month's goals, for invalidating all of them at once. */
 	allGoals: ['goals'] as const,
 	goals: (month: string) => ['goals', month] as const,
+	/** Every month's envelopes, for invalidating all of them at once. */
+	allEnvelopes: ['envelopes'] as const,
+	envelopes: (month: string) => ['envelopes', month] as const,
 	/** Every report, for invalidating all of them at once. */
 	allReports: ['reports'] as const,
 	spendingByCategory: (month: string) =>
@@ -52,11 +55,13 @@ export const useCreateAccount = () => {
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: api.createAccount,
-		// An opening balance also adds a transaction, and with it a payee.
+		// An opening balance also adds a transaction, and with it a payee, and
+		// is money envelopes can be filled from.
 		onSuccess: () =>
 			Promise.all([
 				qc.invalidateQueries({ queryKey: queryKeys.accounts }),
 				qc.invalidateQueries({ queryKey: queryKeys.payees }),
+				qc.invalidateQueries({ queryKey: queryKeys.allEnvelopes }),
 			]),
 	});
 };
@@ -66,7 +71,12 @@ export const useUpdateAccount = () => {
 	return useMutation({
 		mutationFn: ({ id, input }: { id: number; input: AccountUpdate }) =>
 			api.updateAccount(id, input),
-		onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.accounts }),
+		// Investment accounts are off budget, so the type feeds envelopes.
+		onSuccess: () =>
+			Promise.all([
+				qc.invalidateQueries({ queryKey: queryKeys.accounts }),
+				qc.invalidateQueries({ queryKey: queryKeys.allEnvelopes }),
+			]),
 	});
 };
 
@@ -140,15 +150,17 @@ const invalidateTransactions = (
 		// Spending feeds every month's goals from then on, through rollover,
 		// and the reports.
 		qc.invalidateQueries({ queryKey: queryKeys.allGoals }),
+		qc.invalidateQueries({ queryKey: queryKeys.allEnvelopes }),
 		qc.invalidateQueries({ queryKey: queryKeys.allReports }),
 	]);
 };
 
-/** Categories are also the rows of every month's goals and reports. */
+/** Categories are also the rows of every month's goals, envelopes and reports. */
 const invalidateCategories = (qc: QueryClient) => {
 	return Promise.all([
 		qc.invalidateQueries({ queryKey: queryKeys.categories }),
 		qc.invalidateQueries({ queryKey: queryKeys.allGoals }),
+		qc.invalidateQueries({ queryKey: queryKeys.allEnvelopes }),
 		qc.invalidateQueries({ queryKey: queryKeys.allReports }),
 	]);
 };
@@ -221,8 +233,58 @@ export const useSetGoal = () => {
 			month: string;
 			amountCents: number | null;
 		}) => api.setGoal(categoryId, month, amountCents),
-		// A cap applies from its month on, and rolls into later months.
-		onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.allGoals }),
+		// A cap applies from its month on, and rolls into later months. It's
+		// also each envelope's target.
+		onSuccess: () =>
+			Promise.all([
+				qc.invalidateQueries({ queryKey: queryKeys.allGoals }),
+				qc.invalidateQueries({ queryKey: queryKeys.allEnvelopes }),
+			]),
+	});
+};
+
+export const useEnvelopes = (month: string) => {
+	return useQuery({
+		queryKey: queryKeys.envelopes(month),
+		queryFn: () => api.listEnvelopes(month),
+	});
+};
+
+/** Every month's envelopes, since balances roll forward and assignments in
+ * any month come out of Ready to assign. */
+const invalidateEnvelopes = (qc: QueryClient) => {
+	return qc.invalidateQueries({ queryKey: queryKeys.allEnvelopes });
+};
+
+export const useSetEnvelopesStart = () => {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: api.setEnvelopesStart,
+		onSuccess: () => invalidateEnvelopes(qc),
+	});
+};
+
+export const useSetAssignment = () => {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: ({
+			categoryId,
+			month,
+			amountCents,
+		}: {
+			categoryId: number;
+			month: string;
+			amountCents: number;
+		}) => api.setAssignment(categoryId, month, amountCents),
+		onSuccess: () => invalidateEnvelopes(qc),
+	});
+};
+
+export const useFillFromCaps = () => {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: api.fillFromCaps,
+		onSuccess: () => invalidateEnvelopes(qc),
 	});
 };
 
