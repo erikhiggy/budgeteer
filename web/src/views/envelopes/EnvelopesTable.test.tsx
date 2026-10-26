@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import type { Envelope } from '../../api/types';
+import type { CardEnvelope, Envelope } from '../../api/types';
 import { EnvelopesTable } from './EnvelopesTable';
 
 const envelope = (overrides: Partial<Envelope>): Envelope => {
@@ -17,17 +17,38 @@ const envelope = (overrides: Partial<Envelope>): Envelope => {
 	};
 };
 
-const setup = (envelopes: Envelope[], uncategorizedCents = 0) => {
+const card = (overrides: Partial<CardEnvelope>): CardEnvelope => {
+	return {
+		account_id: 7,
+		name: 'Visa',
+		carryover_cents: 0,
+		assigned_cents: 0,
+		purchases_cents: 0,
+		paid_cents: 0,
+		balance_cents: 0,
+		owed_cents: 0,
+		...overrides,
+	};
+};
+
+const setup = (
+	envelopes: Envelope[],
+	uncategorizedCents = 0,
+	cards: CardEnvelope[] = [],
+) => {
 	const user = userEvent.setup();
 	const onAssign = vi.fn().mockResolvedValue(undefined);
+	const onAssignCard = vi.fn().mockResolvedValue(undefined);
 	render(
 		<EnvelopesTable
 			envelopes={envelopes}
+			cards={cards}
 			uncategorizedCents={uncategorizedCents}
 			onAssign={onAssign}
+			onAssignCard={onAssignCard}
 		/>,
 	);
-	return { user, onAssign };
+	return { user, onAssign, onAssignCard };
 };
 
 const row = (name: string) =>
@@ -117,5 +138,45 @@ describe('EnvelopesTable', () => {
 	it('shows uncategorized spending only when there is some', () => {
 		setup([envelope({})], 1234);
 		expect(row('Uncategorized')).toHaveTextContent('12.34');
+	});
+
+	it('shows no credit card section without cards', () => {
+		setup([envelope({})]);
+		expect(screen.queryByText('Credit cards')).toBeNull();
+	});
+
+	it('shows a card’s payments, purchases, and how much of what’s owed is covered', () => {
+		setup([], 0, [
+			card({
+				assigned_cents: 50000,
+				purchases_cents: 10000,
+				paid_cents: 60000,
+				balance_cents: 0,
+				owed_cents: 150000,
+			}),
+			card({
+				account_id: 8,
+				name: 'Amex',
+				purchases_cents: 4000,
+				balance_cents: 4000,
+				owed_cents: 4000,
+			}),
+		]);
+		expect(screen.getByText('Credit cards')).toBeInTheDocument();
+		const visa = row('Visa');
+		expect(visa).toHaveTextContent('500.00');
+		expect(visa).toHaveTextContent('600.00');
+		expect(visa).toHaveTextContent(
+			'100.00 in purchases · owes 1,500.00 (1,500.00 not covered)',
+		);
+		expect(row('Amex')).toHaveTextContent('40.00 in purchases · owes 40.00');
+		expect(row('Amex')).not.toHaveTextContent('not covered');
+	});
+
+	it('assigns to a card', async () => {
+		const { user, onAssignCard } = setup([], 0, [card({ owed_cents: 2000 })]);
+		await user.click(screen.getByRole('button', { name: 'Assigned to Visa' }));
+		await user.keyboard('20{Enter}');
+		expect(onAssignCard).toHaveBeenCalledWith(7, 2000);
 	});
 });

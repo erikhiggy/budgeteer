@@ -1,5 +1,5 @@
 import { useState, type KeyboardEvent } from 'react';
-import type { Envelope } from '../../api/types';
+import type { CardEnvelope, Envelope } from '../../api/types';
 import buttons from '../../components/Button.module.css';
 import { cx } from '../../lib/cx';
 import { formatCents, parseAssigned } from '../../lib/money';
@@ -7,19 +7,26 @@ import styles from './EnvelopesTable.module.css';
 
 type Props = {
 	envelopes: Envelope[];
+	cards: CardEnvelope[];
 	uncategorizedCents: number;
 	/** Sets the month's assignment; 0 removes it. Rejects with a shown Error. */
 	onAssign: (categoryId: number, cents: number) => Promise<unknown>;
+	/** onAssign for a credit card's envelope. */
+	onAssignCard: (accountId: number, cents: number) => Promise<unknown>;
 };
 
 /**
  * One row per expense category: assigned this month (click to edit), spent,
- * and the balance, which carries into the next month either way.
+ * and the balance, which carries into the next month either way. Then one
+ * row per credit card, whose envelope card purchases fill and payments
+ * draw down.
  */
 export const EnvelopesTable = ({
 	envelopes,
+	cards,
 	uncategorizedCents,
 	onAssign,
+	onAssignCard,
 }: Props) => {
 	return (
 		<table className={styles.table}>
@@ -42,7 +49,11 @@ export const EnvelopesTable = ({
 				{envelopes.map((e) => (
 					<EnvelopeRow
 						key={e.category_id}
-						envelope={e}
+						name={e.name}
+						notes={categoryNotes(e)}
+						assignedCents={e.assigned_cents}
+						spentCents={e.spent_cents}
+						balanceCents={e.balance_cents}
 						onAssign={(cents) => onAssign(e.category_id, cents)}
 					/>
 				))}
@@ -61,20 +72,83 @@ export const EnvelopesTable = ({
 					</tr>
 				)}
 			</tbody>
+			{cards.length > 0 && (
+				<tbody>
+					<tr className={styles.section}>
+						<th scope='rowgroup'>Credit cards</th>
+						<th className={styles.money} />
+						<th className={styles.money}>Paid</th>
+						<th className={styles.money} />
+					</tr>
+					{cards.map((c) => (
+						<EnvelopeRow
+							key={c.account_id}
+							name={c.name}
+							notes={cardNotes(c)}
+							assignedCents={c.assigned_cents}
+							spentCents={c.paid_cents}
+							balanceCents={c.balance_cents}
+							onAssign={(cents) => onAssignCard(c.account_id, cents)}
+						/>
+					))}
+				</tbody>
+			)}
 		</table>
 	);
 };
 
+/** The small print under a category: carryover and the cap as a target. */
+const categoryNotes = (e: Envelope): string[] => {
+	const notes = carryoverNotes(e.carryover_cents);
+	if (e.cap_cents !== null) notes.push(`cap ${formatCents(e.cap_cents)}`);
+	return notes;
+};
+
+/** The small print under a card: carryover, purchases, and what's owed. */
+const cardNotes = (c: CardEnvelope): string[] => {
+	const notes = carryoverNotes(c.carryover_cents);
+	if (c.purchases_cents !== 0) {
+		notes.push(`${formatCents(c.purchases_cents)} in purchases`);
+	}
+	if (c.owed_cents > 0) {
+		const uncovered = c.owed_cents - Math.max(c.balance_cents, 0);
+		notes.push(
+			uncovered > 0
+				? `owes ${formatCents(c.owed_cents)} (${formatCents(uncovered)} not covered)`
+				: `owes ${formatCents(c.owed_cents)}`,
+		);
+	}
+	return notes;
+};
+
+const carryoverNotes = (carryoverCents: number): string[] => {
+	if (carryoverCents > 0) {
+		return [`+${formatCents(carryoverCents)} from last month`];
+	}
+	if (carryoverCents < 0) {
+		return [`${formatCents(carryoverCents)} overspent last month`];
+	}
+	return [];
+};
+
 const EnvelopeRow = ({
-	envelope: e,
+	name,
+	notes,
+	assignedCents,
+	spentCents,
+	balanceCents,
 	onAssign,
 }: {
-	envelope: Envelope;
+	name: string;
+	notes: string[];
+	assignedCents: number;
+	spentCents: number;
+	balanceCents: number;
 	onAssign: (cents: number) => Promise<unknown>;
 }) => {
 	const [editing, setEditing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const negative = e.balance_cents < 0;
+	const negative = balanceCents < 0;
 
 	const save = async (cents: number) => {
 		setError(null);
@@ -90,13 +164,16 @@ const EnvelopeRow = ({
 		<>
 			<tr>
 				<td>
-					<div className={styles.name}>{e.name}</div>
-					<Details envelope={e} />
+					<div className={styles.name}>{name}</div>
+					{notes.length > 0 && (
+						<div className={styles.detail}>{notes.join(' · ')}</div>
+					)}
 				</td>
 				<td className={styles.money}>
 					{editing ? (
 						<AssignedEditor
-							envelope={e}
+							name={name}
+							assignedCents={assignedCents}
 							onSave={(cents) => void save(cents)}
 							onCancel={() => {
 								setEditing(false);
@@ -111,16 +188,16 @@ const EnvelopeRow = ({
 								buttons.quiet,
 								buttons.small,
 								styles.assignButton,
-								e.assigned_cents === 0 && styles.zero,
+								assignedCents === 0 && styles.zero,
 							)}
-							aria-label={`Assigned to ${e.name}`}
+							aria-label={`Assigned to ${name}`}
 							onClick={() => setEditing(true)}
 						>
-							{formatCents(e.assigned_cents)}
+							{formatCents(assignedCents)}
 						</button>
 					)}
 				</td>
-				<td className={styles.money}>{formatCents(e.spent_cents)}</td>
+				<td className={styles.money}>{formatCents(spentCents)}</td>
 				<td
 					className={cx(
 						styles.money,
@@ -128,7 +205,7 @@ const EnvelopeRow = ({
 						negative && styles.negative,
 					)}
 				>
-					{formatCents(e.balance_cents)}
+					{formatCents(balanceCents)}
 				</td>
 			</tr>
 			{error && (
@@ -142,33 +219,22 @@ const EnvelopeRow = ({
 	);
 };
 
-/** The small print under a category's name: carryover and the cap as a target. */
-const Details = ({ envelope: e }: { envelope: Envelope }) => {
-	const notes: string[] = [];
-	if (e.carryover_cents > 0) {
-		notes.push(`+${formatCents(e.carryover_cents)} from last month`);
-	} else if (e.carryover_cents < 0) {
-		notes.push(`${formatCents(e.carryover_cents)} overspent last month`);
-	}
-	if (e.cap_cents !== null) notes.push(`cap ${formatCents(e.cap_cents)}`);
-	if (notes.length === 0) return null;
-	return <div className={styles.detail}>{notes.join(' · ')}</div>;
-};
-
 /** Inline assignment input: Enter saves (empty or 0 removes it), Esc cancels. */
 const AssignedEditor = ({
-	envelope,
+	name,
+	assignedCents,
 	onSave,
 	onCancel,
 	onInvalid,
 }: {
-	envelope: Envelope;
+	name: string;
+	assignedCents: number;
 	onSave: (cents: number) => void;
 	onCancel: () => void;
 	onInvalid: (message: string) => void;
 }) => {
 	const [value, setValue] = useState(
-		envelope.assigned_cents === 0 ? '' : formatCents(envelope.assigned_cents),
+		assignedCents === 0 ? '' : formatCents(assignedCents),
 	);
 
 	const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -177,7 +243,7 @@ const AssignedEditor = ({
 			e.preventDefault();
 			const parsed = parseAssigned(value);
 			if (!parsed.ok) return onInvalid(parsed.error);
-			if (parsed.cents === envelope.assigned_cents) return onCancel();
+			if (parsed.cents === assignedCents) return onCancel();
 			onSave(parsed.cents);
 		} else if (e.key === 'Escape') {
 			e.preventDefault();
@@ -187,7 +253,7 @@ const AssignedEditor = ({
 
 	return (
 		<input
-			aria-label={`Assigned to ${envelope.name}`}
+			aria-label={`Assigned to ${name}`}
 			className={styles.assignInput}
 			inputMode='decimal'
 			autoComplete='off'

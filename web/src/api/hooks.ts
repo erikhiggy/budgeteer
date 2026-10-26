@@ -280,6 +280,22 @@ export const useSetAssignment = () => {
 	});
 };
 
+export const useSetCardAssignment = () => {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: ({
+			accountId,
+			month,
+			amountCents,
+		}: {
+			accountId: number;
+			month: string;
+			amountCents: number;
+		}) => api.setCardAssignment(accountId, month, amountCents),
+		onSuccess: () => invalidateEnvelopes(qc),
+	});
+};
+
 export const useFillFromCaps = () => {
 	const qc = useQueryClient();
 	return useMutation({

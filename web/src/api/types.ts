@@ -141,6 +141,23 @@ export type Envelope = {
 	balance_cents: number;
 };
 
+export type CardEnvelope = {
+	account_id: number;
+	name: string;
+	/** Balance from earlier months (negative if more was paid than set aside). */
+	carryover_cents: number;
+	/** Put toward paying the card this month. */
+	assigned_cents: number;
+	/** Categorized spending on the card this month, moved here from its categories. */
+	purchases_cents: number;
+	/** Paid toward the card this month by transfers from on-budget accounts. */
+	paid_cents: number;
+	/** carryover + assigned + purchases − paid. */
+	balance_cents: number;
+	/** Owed on the card at the end of the month; negative for a credit balance. */
+	owed_cents: number;
+};
+
 export type Envelopes = {
 	/** "YYYY-MM" */
 	month: string;
@@ -150,10 +167,12 @@ export type Envelopes = {
 	ready_to_assign_cents: number;
 	/** The month's income in on-budget accounts. */
 	income_cents: number;
-	/** The month's total assigned. */
+	/** The month's total assigned, cards included. */
 	assigned_cents: number;
 	/** Every expense category, sorted by name. All zeros before the start. */
 	envelopes: Envelope[];
+	/** Every credit account, sorted by name. Only owed_cents before the start. */
+	cards: CardEnvelope[];
 	/** Uncategorized spending in the month, not counting transfers. */
 	uncategorized_cents: number;
 };

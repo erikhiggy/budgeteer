@@ -4,6 +4,7 @@ import {
 	useEnvelopes,
 	useFillFromCaps,
 	useSetAssignment,
+	useSetCardAssignment,
 	useSetEnvelopesStart,
 } from '../../api/hooks';
 import type { Envelopes } from '../../api/types';
@@ -31,6 +32,7 @@ const MonthEnvelopes = ({ month }: { month: string }) => {
 	const envelopes = useEnvelopes(month);
 	const setStart = useSetEnvelopesStart();
 	const setAssignment = useSetAssignment();
+	const setCardAssignment = useSetCardAssignment();
 	const fillFromCaps = useFillFromCaps();
 	const [error, setError] = useState<string | null>(null);
 
@@ -79,9 +81,11 @@ const MonthEnvelopes = ({ month }: { month: string }) => {
 						an envelope, or overspent, carries into the next month.
 					</p>
 					<p>
-						Your account balances at the start (except investments) and any
-						income after that are what you can assign. Caps and Goals don’t
-						change.
+						Your account balances at the start (except investments and credit
+						cards) and any income after that are what you can assign. Each
+						credit card gets an envelope: purchases on it move money there to
+						pay the card, and debt you already owe waits there until you assign
+						toward it. Caps and Goals don’t change.
 					</p>
 					{startButton}
 				</div>
@@ -111,10 +115,18 @@ const MonthEnvelopes = ({ month }: { month: string }) => {
 					/>
 					<EnvelopesTable
 						envelopes={envelopes.data.envelopes}
+						cards={envelopes.data.cards}
 						uncategorizedCents={envelopes.data.uncategorized_cents}
 						onAssign={(categoryId, cents) =>
 							setAssignment.mutateAsync({
 								categoryId,
+								month,
+								amountCents: cents,
+							})
+						}
+						onAssignCard={(accountId, cents) =>
+							setCardAssignment.mutateAsync({
+								accountId,
 								month,
 								amountCents: cents,
 							})

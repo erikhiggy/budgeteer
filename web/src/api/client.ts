@@ -136,6 +136,13 @@ export const api = {
 				amount_cents: amountCents,
 			},
 		),
+	/** Sets the month's assignment to a credit card's envelope; 0 removes it. */
+	setCardAssignment: (accountId: number, month: string, amountCents: number) =>
+		request<Envelopes>(
+			'PUT',
+			`/api/envelopes/cards/${accountId}${query({ month })}`,
+			{ amount_cents: amountCents },
+		),
 	/** Assigns each capped envelope with nothing assigned yet its cap. */
 	fillFromCaps: (month: string) =>
 		request<Envelopes>(
