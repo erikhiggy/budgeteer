@@ -92,3 +92,17 @@ export const formatCents = (cents: number): string => {
 export const formatAmount = (cents: number): string => {
 	return (cents > 0 ? '+' : '') + digits(Math.abs(cents));
 };
+
+/**
+ * Parses an envelope assignment. A plain number puts money in, a leading -
+ * (or the − formatCents writes) takes it out, and empty or zero means
+ * nothing assigned (0).
+ */
+export const parseAssigned = (input: string): ParsedAmount => {
+	const parsed = parseBalance(input.trim().replace(/^−/, '-'));
+	if (parsed.ok) return parsed;
+	return {
+		ok: false,
+		error: parsed.error.replace(/^Opening balance/, 'Assigned'),
+	};
+};

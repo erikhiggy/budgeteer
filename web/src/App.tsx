@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, NavLink, Route, Routes } from 'react-router';
 import { cx } from './lib/cx';
 import { CategoriesView } from './views/categories/CategoriesView';
+import { EnvelopesView } from './views/envelopes/EnvelopesView';
 import { GoalsView } from './views/goals/GoalsView';
 import { TransactionsView } from './views/transactions/TransactionsView';
 import styles from './App.module.css';
@@ -20,6 +21,7 @@ export const App = () => {
 					<nav className={styles.nav}>
 						<Tab to='/transactions'>Transactions</Tab>
 						<Tab to='/goals'>Goals</Tab>
+						<Tab to='/envelopes'>Envelopes</Tab>
 						<Tab to='/charts'>Charts</Tab>
 						<Tab to='/categories'>Categories</Tab>
 					</nav>
@@ -34,6 +36,8 @@ export const App = () => {
 							/>
 							<Route path='/goals' element={<GoalsView />} />
 							<Route path='/goals/:month' element={<GoalsView />} />
+							<Route path='/envelopes' element={<EnvelopesView />} />
+							<Route path='/envelopes/:month' element={<EnvelopesView />} />
 							<Route path='/charts' element={<ChartsView />} />
 							<Route path='/charts/:month' element={<ChartsView />} />
 							<Route path='/categories' element={<CategoriesView />} />

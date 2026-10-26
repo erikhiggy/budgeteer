@@ -6,6 +6,7 @@ import type {
 	CategoryInput,
 	CategoryUpdate,
 	DateRange,
+	Envelopes,
 	Goal,
 	Goals,
 	MonthlySpending,
@@ -118,6 +119,36 @@ export const api = {
 		request<Goal>('PUT', `/api/goals/${categoryId}${query({ month })}`, {
 			amount_cents: amountCents,
 		}),
+
+	listEnvelopes: (month: string) =>
+		request<Envelopes>('GET', `/api/envelopes${query({ month })}`),
+	/** Starts envelopes from month, or stops them (null), deleting every assignment. */
+	setEnvelopesStart: (month: string | null) =>
+		request<{ start_month: string | null }>('PUT', '/api/envelopes/start', {
+			month,
+		}),
+	/** Sets the month's assignment; 0 removes it. */
+	setAssignment: (categoryId: number, month: string, amountCents: number) =>
+		request<Envelopes>(
+			'PUT',
+			`/api/envelopes/${categoryId}${query({ month })}`,
+			{
+				amount_cents: amountCents,
+			},
+		),
+	/** Sets the month's assignment to a credit card's envelope; 0 removes it. */
+	setCardAssignment: (accountId: number, month: string, amountCents: number) =>
+		request<Envelopes>(
+			'PUT',
+			`/api/envelopes/cards/${accountId}${query({ month })}`,
+			{ amount_cents: amountCents },
+		),
+	/** Assigns each capped envelope with nothing assigned yet its cap. */
+	fillFromCaps: (month: string) =>
+		request<Envelopes>(
+			'POST',
+			`/api/envelopes/fill-from-caps${query({ month })}`,
+		),
 
 	spendingByCategory: (month: string) =>
 		request<SpendingByCategory>(

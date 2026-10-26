@@ -52,6 +52,11 @@ func New(db *sql.DB, dist fs.FS) http.Handler {
 	mux.HandleFunc("POST /api/transfers", h.createTransfer)
 	mux.HandleFunc("GET /api/goals", h.listGoals)
 	mux.HandleFunc("PUT /api/goals/{category_id}", h.setGoal)
+	mux.HandleFunc("GET /api/envelopes", h.listEnvelopes)
+	mux.HandleFunc("PUT /api/envelopes/start", h.setEnvelopesStart)
+	mux.HandleFunc("PUT /api/envelopes/{category_id}", h.setAssignment)
+	mux.HandleFunc("PUT /api/envelopes/cards/{account_id}", h.setCardAssignment)
+	mux.HandleFunc("POST /api/envelopes/fill-from-caps", h.fillFromCaps)
 	mux.HandleFunc("GET /api/reports/spending-by-category", h.spendingByCategory)
 	mux.HandleFunc("GET /api/reports/monthly-spending", h.monthlySpending)
 
