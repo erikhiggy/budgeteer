@@ -22,14 +22,31 @@ type Envelope struct {
 	BalanceCents   int64  `json:"balance_cents"`
 }
 
+// CardEnvelope is one credit account's envelope for a month: money set aside
+// to pay the card. Categorized purchases on the card move money into it from
+// their categories, and payments to the card draw it down.
+type CardEnvelope struct {
+	AccountID      int64  `json:"account_id"`
+	Name           string `json:"name"`
+	CarryoverCents int64  `json:"carryover_cents"`
+	AssignedCents  int64  `json:"assigned_cents"`
+	PurchasesCents int64  `json:"purchases_cents"`
+	PaidCents      int64  `json:"paid_cents"`
+	BalanceCents   int64  `json:"balance_cents"`
+	// OwedCents is what's owed on the card at the end of the month: minus
+	// its balance, so a credit balance is negative.
+	OwedCents int64 `json:"owed_cents"`
+}
+
 type Envelopes struct {
-	Month              string     `json:"month"`
-	StartMonth         *string    `json:"start_month"`
-	ReadyToAssignCents int64      `json:"ready_to_assign_cents"`
-	IncomeCents        int64      `json:"income_cents"`
-	AssignedCents      int64      `json:"assigned_cents"`
-	Envelopes          []Envelope `json:"envelopes"`
-	UncategorizedCents int64      `json:"uncategorized_cents"`
+	Month              string         `json:"month"`
+	StartMonth         *string        `json:"start_month"`
+	ReadyToAssignCents int64          `json:"ready_to_assign_cents"`
+	IncomeCents        int64          `json:"income_cents"`
+	AssignedCents      int64          `json:"assigned_cents"`
+	Envelopes          []Envelope     `json:"envelopes"`
+	Cards              []CardEnvelope `json:"cards"`
+	UncategorizedCents int64          `json:"uncategorized_cents"`
 }
 
 // EnvelopesStart returns the month envelopes count from, or nil if envelope
@@ -67,6 +84,9 @@ func (s *Store) SetEnvelopesStart(ctx context.Context, month *string) error {
 	defer tx.Rollback() // no-op after Commit
 	if _, err := tx.ExecContext(ctx, `DELETE FROM assignments`); err != nil {
 		return fmt.Errorf("delete assignments: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM card_assignments`); err != nil {
+		return fmt.Errorf("delete card assignments: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM settings WHERE key = ?`, envelopesStartKey); err != nil {
 		return fmt.Errorf("clear envelopes start: %w", err)
@@ -128,15 +148,148 @@ func (s *Store) ListEnvelopes(ctx context.Context, month string) (Envelopes, err
 	}
 	envs.UncategorizedCents = spent[spendKey{0, month}]
 
+	cards, cardAssignedTotal, err := s.cardEnvelopes(ctx, start, month)
+	if err != nil {
+		return Envelopes{}, err
+	}
+	envs.Cards = cards
+	for _, c := range cards {
+		envs.AssignedCents += c.AssignedCents
+	}
+
 	if active {
 		funds, income, err := s.funds(ctx, *start, month)
 		if err != nil {
 			return Envelopes{}, err
 		}
 		envs.IncomeCents = income
-		envs.ReadyToAssignCents = funds - assignedTotal
+		envs.ReadyToAssignCents = funds - assignedTotal - cardAssignedTotal
 	}
 	return envs, nil
+}
+
+// cardEnvelopes returns an envelope for every credit account, sorted by
+// name, and the total assigned to them in any month from start on. Before
+// start (or with start nil), only OwedCents is filled in.
+func (s *Store) cardEnvelopes(ctx context.Context, start *string, month string) ([]CardEnvelope, int64, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT a.id, a.name, -COALESCE(SUM(t.amount_cents), 0)
+		FROM accounts a
+		LEFT JOIN transactions t ON t.account_id = a.id AND t.date < ?
+		WHERE a.type = 'credit'
+		GROUP BY a.id
+		ORDER BY a.name COLLATE NOCASE`, nextMonth(month)+"-01")
+	if err != nil {
+		return nil, 0, err
+	}
+	cards := []CardEnvelope{} // non-nil so it encodes as [] rather than null
+	for rows.Next() {
+		var c CardEnvelope
+		if err := rows.Scan(&c.AccountID, &c.Name, &c.OwedCents); err != nil {
+			rows.Close()
+			return nil, 0, err
+		}
+		cards = append(cards, c)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	if start == nil || *start > month {
+		return cards, 0, nil
+	}
+
+	assigned, total, err := s.cardAssignmentsSince(ctx, *start)
+	if err != nil {
+		return nil, 0, err
+	}
+	activity, err := s.cardActivity(ctx, *start, month)
+	if err != nil {
+		return nil, 0, err
+	}
+	for i := range cards {
+		c := &cards[i]
+		for m := *start; m < month; m = nextMonth(m) {
+			k := spendKey{c.AccountID, m}
+			a := activity[k]
+			c.CarryoverCents += assigned[k] + a.purchases - a.paid
+		}
+		k := spendKey{c.AccountID, month}
+		c.AssignedCents = assigned[k]
+		c.PurchasesCents = activity[k].purchases
+		c.PaidCents = activity[k].paid
+		c.BalanceCents = c.CarryoverCents + c.AssignedCents + c.PurchasesCents - c.PaidCents
+	}
+	return cards, total, nil
+}
+
+// cardActivityRow is a credit account's activity in a month.
+type cardActivityRow struct {
+	// purchases is categorized spending on the card (refunds reduce it);
+	// income and uncategorized transactions don't count.
+	purchases int64
+	// paid is what transfers from on-budget accounts paid toward the card.
+	// A transfer out of the card, e.g. a cash advance, makes it negative.
+	paid int64
+}
+
+// cardActivity returns each credit account's activity by month from start
+// through month, keyed by account id (in spendKey's CategoryID).
+func (s *Store) cardActivity(ctx context.Context, start, month string) (map[spendKey]cardActivityRow, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT t.account_id, substr(t.date, 1, 7),
+			-COALESCE(SUM(CASE WHEN t.transfer_id IS NULL AND c.is_income = 0 THEN t.amount_cents END), 0),
+			COALESCE(SUM(CASE WHEN oa.type <> 'investment' THEN t.amount_cents END), 0)
+		FROM transactions t
+		JOIN accounts a ON a.id = t.account_id
+		LEFT JOIN categories c ON c.id = t.category_id
+		LEFT JOIN transactions o ON o.transfer_id = t.transfer_id AND o.id <> t.id
+		LEFT JOIN accounts oa ON oa.id = o.account_id
+		WHERE a.type = 'credit' AND t.date >= ? AND t.date < ?
+		GROUP BY 1, 2`, start+"-01", nextMonth(month)+"-01")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	activity := map[spendKey]cardActivityRow{}
+	for rows.Next() {
+		var k spendKey
+		var a cardActivityRow
+		if err := rows.Scan(&k.CategoryID, &k.Month, &a.purchases, &a.paid); err != nil {
+			return nil, err
+		}
+		activity[k] = a
+	}
+	return activity, rows.Err()
+}
+
+// cardAssignmentsSince is assignmentsSince for credit accounts, keyed by
+// account id. Assignments to an account that's no longer a credit account
+// are left out.
+func (s *Store) cardAssignmentsSince(ctx context.Context, start string) (map[spendKey]int64, int64, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT ca.account_id, ca.month, ca.amount_cents
+		FROM card_assignments ca
+		JOIN accounts a ON a.id = ca.account_id
+		WHERE a.type = 'credit' AND ca.month >= ?`, start)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	assigned := map[spendKey]int64{}
+	var total int64
+	for rows.Next() {
+		var k spendKey
+		var cents int64
+		if err := rows.Scan(&k.CategoryID, &k.Month, &cents); err != nil {
+			return nil, 0, err
+		}
+		assigned[k] = cents
+		total += cents
+	}
+	return assigned, total, rows.Err()
 }
 
 // SetAssignment sets categoryID's assignment for month; 0 removes it. It
@@ -168,6 +321,39 @@ func (s *Store) SetAssignment(ctx context.Context, categoryID int64, month strin
 	}
 	if err != nil {
 		return Envelopes{}, fmt.Errorf("set assignment: %w", err)
+	}
+	return s.ListEnvelopes(ctx, month)
+}
+
+// SetCardAssignment sets credit account accountID's assignment for month; 0
+// removes it. It expects month to be validated already (see package api),
+// and returns the month's envelopes.
+func (s *Store) SetCardAssignment(ctx context.Context, accountID int64, month string, cents int64) (Envelopes, error) {
+	if err := s.checkEnvelopeMonth(ctx, month); err != nil {
+		return Envelopes{}, err
+	}
+	a, err := s.getAccount(ctx, accountID)
+	if err != nil {
+		return Envelopes{}, err
+	}
+	if a.Type != "credit" {
+		return Envelopes{}, errorf(Invalid, "%q isn't a credit account, so it has no envelope", a.Name)
+	}
+
+	if cents == 0 {
+		_, err = s.db.ExecContext(ctx, `DELETE FROM card_assignments WHERE account_id = ? AND month = ?`, accountID, month)
+	} else {
+		_, err = s.db.ExecContext(ctx, `
+			INSERT INTO card_assignments (account_id, month, amount_cents) VALUES (?, ?, ?)
+			ON CONFLICT (account_id, month) DO UPDATE SET amount_cents = excluded.amount_cents`,
+			accountID, month, cents)
+	}
+	// Backstop for an account deleted since the check above.
+	if isForeignKey(err) {
+		return Envelopes{}, errorf(NotFound, "no account with id %d", accountID)
+	}
+	if err != nil {
+		return Envelopes{}, fmt.Errorf("set card assignment: %w", err)
 	}
 	return s.ListEnvelopes(ctx, month)
 }
@@ -254,17 +440,28 @@ func (s *Store) assignmentsSince(ctx context.Context, start string) (map[spendKe
 }
 
 // funds returns the money envelopes can be filled from through month: the
-// balance of every account except investments just before start, plus their
-// income from start through month. income is month's income alone.
+// balance just before start of every account except investments and credit
+// cards, plus income in those accounts and on cards from start through
+// month. Debt on a card, whether from before start or a card's opening
+// balance, isn't money to assign; it shows in the card's envelope as owed.
+// income is month's income alone.
 func (s *Store) funds(ctx context.Context, start, month string) (funds, income int64, err error) {
 	err = s.db.QueryRowContext(ctx, `
+		WITH counted AS (
+			SELECT t.date, t.amount_cents,
+				CASE
+					WHEN t.date < ? THEN a.type <> 'credit'
+					ELSE c.is_income = 1 AND NOT (a.type = 'credit' AND c.name = ?)
+				END AS counts
+			FROM transactions t
+			JOIN accounts a ON a.id = t.account_id
+			LEFT JOIN categories c ON c.id = t.category_id
+			WHERE a.type <> 'investment' AND t.date < ?
+		)
 		SELECT
-			COALESCE(SUM(CASE WHEN t.date < ? OR c.is_income = 1 THEN t.amount_cents END), 0),
-			COALESCE(SUM(CASE WHEN t.date >= ? AND c.is_income = 1 THEN t.amount_cents END), 0)
-		FROM transactions t
-		JOIN accounts a ON a.id = t.account_id
-		LEFT JOIN categories c ON c.id = t.category_id
-		WHERE a.type <> 'investment' AND t.date < ?`,
-		start+"-01", month+"-01", nextMonth(month)+"-01").Scan(&funds, &income)
+			COALESCE(SUM(CASE WHEN counts THEN amount_cents END), 0),
+			COALESCE(SUM(CASE WHEN counts AND date >= ? THEN amount_cents END), 0)
+		FROM counted`,
+		start+"-01", OpeningBalanceCategory, nextMonth(month)+"-01", month+"-01").Scan(&funds, &income)
 	return funds, income, err
 }

@@ -24,7 +24,8 @@ func (in *envelopesStartInput) validate() error {
 	return nil
 }
 
-// assignmentInput is the JSON body for PUT /api/envelopes/{category_id}.
+// assignmentInput is the JSON body for PUT /api/envelopes/{category_id} and
+// PUT /api/envelopes/cards/{account_id}.
 type assignmentInput struct {
 	// The month's assignment; 0 removes it. Required, so {} can't clear one.
 	AmountCents *int64 `json:"amount_cents"`
@@ -84,6 +85,34 @@ func (h *handlers) setAssignment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	envs, err := h.store.SetAssignment(r.Context(), categoryID, month, *in.AmountCents)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, envs)
+}
+
+func (h *handlers) setCardAssignment(w http.ResponseWriter, r *http.Request) {
+	raw := r.PathValue("account_id")
+	accountID, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || accountID <= 0 {
+		writeError(w, http.StatusBadRequest, "invalid account_id "+strconv.Quote(raw))
+		return
+	}
+	month, ok := requiredMonth(w, r)
+	if !ok {
+		return
+	}
+	var in assignmentInput
+	if err := readJSON(w, r, &in); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if in.AmountCents == nil {
+		writeError(w, http.StatusBadRequest, "amount_cents is required; use 0 to remove the assignment")
+		return
+	}
+	envs, err := h.store.SetCardAssignment(r.Context(), accountID, month, *in.AmountCents)
 	if err != nil {
 		writeStoreError(w, err)
 		return

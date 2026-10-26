@@ -191,3 +191,101 @@ func TestMovingToIncomeDeletesAssignments(t *testing.T) {
 		t.Errorf("%d assignments left, want 0", n)
 	}
 }
+
+// cardFor returns credit account id's envelope in envs.
+func cardFor(t *testing.T, envs Envelopes, id int64) CardEnvelope {
+	t.Helper()
+	for _, c := range envs.Cards {
+		if c.AccountID == id {
+			return c
+		}
+	}
+	t.Fatalf("no card envelope for account %d in %+v", id, envs)
+	return CardEnvelope{}
+}
+
+func TestCardEnvelopes(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+	checking, err := s.CreateAccount(ctx, AccountInput{Name: "Checking", Type: "checking", OpeningBalanceCents: 300000, OpeningBalanceDate: "2026-10-01"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	visa, err := s.CreateAccount(ctx, AccountInput{Name: "Visa", Type: "credit", OpeningBalanceCents: -200000, OpeningBalanceDate: "2026-10-01"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	groceries, _ := s.CreateCategory(ctx, CategoryInput{Name: "Groceries"})
+	if err := s.SetEnvelopesStart(ctx, month("2026-11")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Debt from before the start is owed on the card, not taken out of
+	// Ready to assign.
+	nov := listEnvelopes(t, s, "2026-11")
+	if nov.ReadyToAssignCents != 300000 {
+		t.Errorf("Ready to assign = %d, want 300000", nov.ReadyToAssignCents)
+	}
+	if c := cardFor(t, nov, visa.ID); c.Name != "Visa" || c.OwedCents != 200000 || c.BalanceCents != 0 {
+		t.Errorf("Visa at the start = %+v", c)
+	}
+
+	// Assign 500 toward the debt, buy 100 of groceries on the card, and pay 600.
+	if _, err := s.SetCardAssignment(ctx, visa.ID, "2026-11", 50000); err != nil {
+		t.Fatal(err)
+	}
+	assign(t, s, groceries.ID, "2026-11", 10000)
+	spend(t, s, visa.ID, &groceries.ID, "2026-11-05", -10000)
+	if _, err := s.CreateTransfer(ctx, TransferInput{AccountID: checking.ID, OtherAccountID: visa.ID, Date: "2026-11-20", AmountCents: -60000}); err != nil {
+		t.Fatal(err)
+	}
+	nov = listEnvelopes(t, s, "2026-11")
+	if nov.ReadyToAssignCents != 240000 || nov.AssignedCents != 60000 {
+		t.Errorf("Nov totals = %+v", nov)
+	}
+	if c := cardFor(t, nov, visa.ID); c.AssignedCents != 50000 || c.PurchasesCents != 10000 || c.PaidCents != 60000 || c.BalanceCents != 0 || c.OwedCents != 150000 {
+		t.Errorf("Nov Visa = %+v", c)
+	}
+	if g := envelopeFor(t, nov, groceries.ID); g.BalanceCents != 0 || g.SpentCents != 10000 {
+		t.Errorf("Nov groceries = %+v", g)
+	}
+
+	// Paying more than was set aside overdraws the envelope, like overspending.
+	if _, err := s.CreateTransfer(ctx, TransferInput{AccountID: checking.ID, OtherAccountID: visa.ID, Date: "2026-12-02", AmountCents: -20000}); err != nil {
+		t.Fatal(err)
+	}
+	if c := cardFor(t, listEnvelopes(t, s, "2026-12"), visa.ID); c.CarryoverCents != 0 || c.PaidCents != 20000 || c.BalanceCents != -20000 || c.OwedCents != 130000 {
+		t.Errorf("Dec Visa = %+v", c)
+	}
+
+	// A card opened after the start brings its debt with it, not into income.
+	amex, err := s.CreateAccount(ctx, AccountInput{Name: "Amex", Type: "credit", OpeningBalanceCents: -30000, OpeningBalanceDate: "2026-12-10"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec := listEnvelopes(t, s, "2026-12")
+	if dec.ReadyToAssignCents != 240000 || dec.IncomeCents != 0 {
+		t.Errorf("Dec totals after a new card = %+v", dec)
+	}
+	if c := cardFor(t, dec, amex.ID); c.OwedCents != 30000 || c.BalanceCents != 0 {
+		t.Errorf("Dec Amex = %+v", c)
+	}
+
+	_, err = s.SetCardAssignment(ctx, checking.ID, "2026-12", 100)
+	wantKind(t, err, Invalid)
+	_, err = s.SetCardAssignment(ctx, 999, "2026-12", 100)
+	wantKind(t, err, NotFound)
+	_, err = s.SetCardAssignment(ctx, visa.ID, "2026-10", 100)
+	wantKind(t, err, Invalid)
+
+	// Stopping deletes card assignments too.
+	if err := s.SetEnvelopesStart(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetEnvelopesStart(ctx, month("2026-11")); err != nil {
+		t.Fatal(err)
+	}
+	if c := cardFor(t, listEnvelopes(t, s, "2026-11"), visa.ID); c.AssignedCents != 0 {
+		t.Errorf("after stop and restart: Visa = %+v", c)
+	}
+}
