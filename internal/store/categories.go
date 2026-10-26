@@ -86,7 +86,7 @@ func (s *Store) CreateCategory(ctx context.Context, in CategoryInput) (Category,
 // UpdateCategory expects in to be validated already (see package api), with
 // at least one field set. Renaming OpeningBalanceCategory is a Conflict, and
 // an income category can't roll over. Moving a category to income deletes
-// its goals and turns rollover off.
+// its goals and envelope assignments and turns rollover off.
 func (s *Store) UpdateCategory(ctx context.Context, id int64, in CategoryUpdate) (Category, error) {
 	current, err := s.getCategory(ctx, id)
 	if err != nil {
@@ -139,6 +139,9 @@ func (s *Store) UpdateCategory(ctx context.Context, id int64, in CategoryUpdate)
 	if toIncome {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM goals WHERE category_id = ?`, id); err != nil {
 			return Category{}, fmt.Errorf("delete goals: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM assignments WHERE category_id = ?`, id); err != nil {
+			return Category{}, fmt.Errorf("delete assignments: %w", err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
