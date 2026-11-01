@@ -18,11 +18,18 @@ type Category struct {
 	IsIncome bool   `json:"is_income"`
 	// RolloverSince is the "YYYY-MM" rollover starts from; nil means off.
 	RolloverSince *string `json:"rollover_since"`
+	// GroupID is the category's group; nil means ungrouped. Income
+	// categories are never grouped.
+	//
+	// TODO(groups): ListCategories, getCategory and CreateCategory don't read
+	// or write it yet.
+	GroupID *int64 `json:"group_id"`
 }
 
 type CategoryInput struct {
 	Name     string
 	IsIncome bool
+	GroupID  *int64 // TODO(groups): not used yet
 }
 
 // CategoryUpdate changes the non-nil fields. RolloverSince is applied only
@@ -32,6 +39,10 @@ type CategoryUpdate struct {
 	IsIncome      *bool
 	SetRollover   bool
 	RolloverSince *string
+	// GroupID is applied only when SetGroup is true, since nil there means
+	// "ungroup". TODO(groups): not used yet.
+	SetGroup bool
+	GroupID  *int64
 }
 
 func (s *Store) ListCategories(ctx context.Context) ([]Category, error) {

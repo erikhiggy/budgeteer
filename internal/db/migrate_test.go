@@ -364,3 +364,55 @@ func TestInvestmentAccountsMigrationKeepsExistingData(t *testing.T) {
 		t.Error("deleted an account with transactions, want the RESTRICT to hold")
 	}
 }
+
+func TestCategoryGroupsMigration(t *testing.T) {
+	db := openTemp(t)
+	ctx := context.Background()
+
+	// A database from before groups, with a category in use.
+	if err := Migrate(ctx, db, upTo(t, 6)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO categories (name) VALUES ('Coffee')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := Migrate(ctx, db, upTo(t, 7)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Existing categories start out ungrouped.
+	var group sql.NullInt64
+	if err := db.QueryRow(`SELECT group_id FROM categories WHERE name = 'Coffee'`).Scan(&group); err != nil {
+		t.Fatal(err)
+	}
+	if group.Valid {
+		t.Errorf("group_id = %d, want NULL", group.Int64)
+	}
+
+	// Group names are unique regardless of case.
+	if _, err := db.Exec(`INSERT INTO category_groups (name) VALUES ('Housing')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO category_groups (name) VALUES ('HOUSING')`); err == nil {
+		t.Error("inserted a second group differing only in case")
+	}
+
+	// A category can't point at a group that doesn't exist.
+	if _, err := db.Exec(`UPDATE categories SET group_id = 999 WHERE name = 'Coffee'`); err == nil {
+		t.Error("set group_id to a missing group")
+	}
+
+	// Deleting a group ungroups its categories instead of deleting them.
+	if _, err := db.Exec(`UPDATE categories SET group_id = (SELECT id FROM category_groups WHERE name = 'Housing') WHERE name = 'Coffee'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`DELETE FROM category_groups WHERE name = 'Housing'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT group_id FROM categories WHERE name = 'Coffee'`).Scan(&group); err != nil {
+		t.Fatalf("category gone after deleting its group: %v", err)
+	}
+	if group.Valid {
+		t.Errorf("group_id = %d after deleting the group, want NULL", group.Int64)
+	}
+}

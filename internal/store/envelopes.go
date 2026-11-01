@@ -15,6 +15,7 @@ const envelopesStartKey = "envelopes_start"
 type Envelope struct {
 	CategoryID     int64  `json:"category_id"`
 	Name           string `json:"name"`
+	GroupID        *int64 `json:"group_id"` // TODO(groups): not filled in yet
 	CapCents       *int64 `json:"cap_cents"`
 	CarryoverCents int64  `json:"carryover_cents"`
 	AssignedCents  int64  `json:"assigned_cents"`
@@ -39,14 +40,15 @@ type CardEnvelope struct {
 }
 
 type Envelopes struct {
-	Month              string         `json:"month"`
-	StartMonth         *string        `json:"start_month"`
-	ReadyToAssignCents int64          `json:"ready_to_assign_cents"`
-	IncomeCents        int64          `json:"income_cents"`
-	AssignedCents      int64          `json:"assigned_cents"`
-	Envelopes          []Envelope     `json:"envelopes"`
-	Cards              []CardEnvelope `json:"cards"`
-	UncategorizedCents int64          `json:"uncategorized_cents"`
+	Month              string          `json:"month"`
+	StartMonth         *string         `json:"start_month"`
+	ReadyToAssignCents int64           `json:"ready_to_assign_cents"`
+	IncomeCents        int64           `json:"income_cents"`
+	AssignedCents      int64           `json:"assigned_cents"`
+	Groups             []EnvelopeGroup `json:"groups"` // TODO(groups): not filled in yet
+	Envelopes          []Envelope      `json:"envelopes"`
+	Cards              []CardEnvelope  `json:"cards"`
+	UncategorizedCents int64           `json:"uncategorized_cents"`
 }
 
 // EnvelopesStart returns the month envelopes count from, or nil if envelope
