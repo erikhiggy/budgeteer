@@ -15,7 +15,7 @@ const envelopesStartKey = "envelopes_start"
 type Envelope struct {
 	CategoryID     int64  `json:"category_id"`
 	Name           string `json:"name"`
-	GroupID        *int64 `json:"group_id"` // TODO(groups): not filled in yet
+	GroupID        *int64 `json:"group_id"`
 	CapCents       *int64 `json:"cap_cents"`
 	CarryoverCents int64  `json:"carryover_cents"`
 	AssignedCents  int64  `json:"assigned_cents"`
@@ -45,7 +45,7 @@ type Envelopes struct {
 	ReadyToAssignCents int64           `json:"ready_to_assign_cents"`
 	IncomeCents        int64           `json:"income_cents"`
 	AssignedCents      int64           `json:"assigned_cents"`
-	Groups             []EnvelopeGroup `json:"groups"` // TODO(groups): not filled in yet
+	Groups             []EnvelopeGroup `json:"groups"`
 	Envelopes          []Envelope      `json:"envelopes"`
 	Cards              []CardEnvelope  `json:"cards"`
 	UncategorizedCents int64           `json:"uncategorized_cents"`
@@ -133,7 +133,7 @@ func (s *Store) ListEnvelopes(ctx context.Context, month string) (Envelopes, err
 
 	envs := Envelopes{Month: month, StartMonth: start, Envelopes: []Envelope{}}
 	for _, c := range cats {
-		e := Envelope{CategoryID: c.ID, Name: c.Name}
+		e := Envelope{CategoryID: c.ID, Name: c.Name, GroupID: c.GroupID}
 		if row := capAt(caps[c.ID], month); row != nil && row.Cents != nil {
 			e.CapCents = row.Cents
 		}
@@ -149,6 +149,9 @@ func (s *Store) ListEnvelopes(ctx context.Context, month string) (Envelopes, err
 		envs.Envelopes = append(envs.Envelopes, e)
 	}
 	envs.UncategorizedCents = spent[spendKey{0, month}]
+	if envs.Groups, err = s.envelopeGroups(ctx, envs.Envelopes); err != nil {
+		return Envelopes{}, err
+	}
 
 	cards, cardAssignedTotal, err := s.cardEnvelopes(ctx, start, month)
 	if err != nil {
@@ -466,4 +469,29 @@ func (s *Store) funds(ctx context.Context, start, month string) (funds, income i
 		FROM counted`,
 		start+"-01", OpeningBalanceCategory, nextMonth(month)+"-01", month+"-01").Scan(&funds, &income)
 	return funds, income, err
+}
+
+// envelopeGroups returns every group, in order, with the totals over its
+// envelopes. A group with no envelopes still appears, with zeros.
+func (s *Store) envelopeGroups(ctx context.Context, envelopes []Envelope) ([]EnvelopeGroup, error) {
+	groups, err := s.ListCategoryGroups(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]EnvelopeGroup, len(groups))
+	index := make(map[int64]int, len(groups))
+	for i, g := range groups {
+		out[i] = EnvelopeGroup{ID: g.ID, Name: g.Name}
+		index[g.ID] = i
+	}
+	for _, e := range envelopes {
+		if e.GroupID == nil {
+			continue
+		}
+		g := &out[index[*e.GroupID]]
+		g.AssignedCents += e.AssignedCents
+		g.SpentCents += e.SpentCents
+		g.BalanceCents += e.BalanceCents
+	}
+	return out, nil
 }
