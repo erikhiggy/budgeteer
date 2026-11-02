@@ -18,11 +18,15 @@ type Category struct {
 	IsIncome bool   `json:"is_income"`
 	// RolloverSince is the "YYYY-MM" rollover starts from; nil means off.
 	RolloverSince *string `json:"rollover_since"`
+	// GroupID is the category's group; nil means ungrouped. Income
+	// categories are never grouped.
+	GroupID *int64 `json:"group_id"`
 }
 
 type CategoryInput struct {
 	Name     string
 	IsIncome bool
+	GroupID  *int64
 }
 
 // CategoryUpdate changes the non-nil fields. RolloverSince is applied only
@@ -32,11 +36,15 @@ type CategoryUpdate struct {
 	IsIncome      *bool
 	SetRollover   bool
 	RolloverSince *string
+	// GroupID is applied only when SetGroup is true, since nil there means
+	// "ungroup".
+	SetGroup bool
+	GroupID  *int64
 }
 
 func (s *Store) ListCategories(ctx context.Context) ([]Category, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT c.id, c.name, c.is_income, c.rollover_since
+		SELECT c.id, c.name, c.is_income, c.rollover_since, c.group_id
 		FROM categories c
 		ORDER BY c.is_income, c.name COLLATE NOCASE`)
 	if err != nil {
@@ -47,7 +55,7 @@ func (s *Store) ListCategories(ctx context.Context) ([]Category, error) {
 	categories := []Category{} // non-nil so it encodes as [] rather than null
 	for rows.Next() {
 		var c Category
-		if err := rows.Scan(&c.ID, &c.Name, &c.IsIncome, &c.RolloverSince); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.IsIncome, &c.RolloverSince, &c.GroupID); err != nil {
 			return nil, err
 		}
 		categories = append(categories, c)
@@ -59,17 +67,27 @@ func (s *Store) ListCategories(ctx context.Context) ([]Category, error) {
 func (s *Store) getCategory(ctx context.Context, id int64) (Category, error) {
 	var c Category
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, name, is_income, rollover_since FROM categories WHERE id = ?`, id).Scan(&c.ID, &c.Name, &c.IsIncome, &c.RolloverSince)
+		`SELECT id, name, is_income, rollover_since, group_id FROM categories WHERE id = ?`, id).Scan(&c.ID, &c.Name, &c.IsIncome, &c.RolloverSince, &c.GroupID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Category{}, errorf(NotFound, "no category with id %d", id)
 	}
 	return c, err
 }
 
-// CreateCategory expects in to be validated already (see package api).
+// CreateCategory expects in to be validated already (see package api). An
+// income category can't have a group (Invalid), and an unknown group is a
+// NotFound.
 func (s *Store) CreateCategory(ctx context.Context, in CategoryInput) (Category, error) {
+	if in.GroupID != nil {
+		if in.IsIncome {
+			return Category{}, errIncomeGroup()
+		}
+		if _, err := s.getCategoryGroup(ctx, *in.GroupID); err != nil {
+			return Category{}, err
+		}
+	}
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO categories (name, is_income) VALUES (?, ?)`, in.Name, in.IsIncome)
+		`INSERT INTO categories (name, is_income, group_id) VALUES (?, ?, ?)`, in.Name, in.IsIncome, in.GroupID)
 	if isUnique(err) {
 		return Category{}, errorf(Conflict, "a category named %q already exists", in.Name)
 	}
@@ -80,13 +98,14 @@ func (s *Store) CreateCategory(ctx context.Context, in CategoryInput) (Category,
 	if err != nil {
 		return Category{}, err
 	}
-	return Category{ID: id, Name: in.Name, IsIncome: in.IsIncome}, nil
+	return Category{ID: id, Name: in.Name, IsIncome: in.IsIncome, GroupID: in.GroupID}, nil
 }
 
 // UpdateCategory expects in to be validated already (see package api), with
 // at least one field set. Renaming OpeningBalanceCategory is a Conflict, and
-// an income category can't roll over. Moving a category to income deletes
-// its goals and envelope assignments and turns rollover off.
+// an income category can't roll over or have a group (Invalid), and an
+// unknown group is a NotFound. Moving a category to income deletes its goals
+// and envelope assignments and turns rollover and its group off.
 func (s *Store) UpdateCategory(ctx context.Context, id int64, in CategoryUpdate) (Category, error) {
 	current, err := s.getCategory(ctx, id)
 	if err != nil {
@@ -103,6 +122,14 @@ func (s *Store) UpdateCategory(ctx context.Context, id int64, in CategoryUpdate)
 		return Category{}, errorf(Invalid, "an income category can't roll over")
 	}
 	toIncome := income && !current.IsIncome
+	if in.SetGroup && in.GroupID != nil {
+		if income {
+			return Category{}, errIncomeGroup()
+		}
+		if _, err := s.getCategoryGroup(ctx, *in.GroupID); err != nil {
+			return Category{}, err
+		}
+	}
 
 	var set []string
 	var args []any
@@ -117,6 +144,15 @@ func (s *Store) UpdateCategory(ctx context.Context, id int64, in CategoryUpdate)
 	if in.SetRollover || toIncome {
 		set = append(set, "rollover_since = ?")
 		args = append(args, in.RolloverSince) // nil when moving to income
+	}
+
+	if in.SetGroup || toIncome {
+		set = append(set, "group_id = ?")
+		if toIncome {
+			args = append(args, nil)
+		} else {
+			args = append(args, in.GroupID)
+		}
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -180,4 +216,8 @@ func (s *Store) DeleteCategory(ctx context.Context, id int64) error {
 
 func errLockedCategory() error {
 	return errorf(Conflict, "%q is used for account opening balances and can't be renamed or deleted", OpeningBalanceCategory)
+}
+
+func errIncomeGroup() error {
+	return errorf(Invalid, "an income category can't be in a group")
 }

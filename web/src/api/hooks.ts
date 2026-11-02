@@ -7,6 +7,7 @@ import {
 import { api, ApiError } from './client';
 import type {
 	AccountUpdate,
+	CategoryGroupUpdate,
 	CategoryUpdate,
 	Transaction,
 	TransactionInput,
@@ -15,6 +16,7 @@ import type {
 export const queryKeys = {
 	accounts: ['accounts'] as const,
 	categories: ['categories'] as const,
+	categoryGroups: ['category-groups'] as const,
 	transactions: (accountId: number) => ['transactions', accountId] as const,
 	payees: ['payees'] as const,
 	/** Every month's goals, for invalidating all of them at once. */
@@ -117,6 +119,55 @@ export const useDeleteCategory = () => {
 	return useMutation({
 		mutationFn: api.deleteCategory,
 		onSuccess: () => invalidateCategories(qc),
+	});
+};
+
+export const useCategoryGroups = () => {
+	return useQuery({
+		queryKey: queryKeys.categoryGroups,
+		queryFn: api.listCategoryGroups,
+	});
+};
+
+/** Deleting a group ungroups categories, so the categories refetch too. */
+const invalidateGroups = (qc: QueryClient) => {
+	return Promise.all([
+		qc.invalidateQueries({ queryKey: queryKeys.categoryGroups }),
+		qc.invalidateQueries({ queryKey: queryKeys.categories }),
+		qc.invalidateQueries({ queryKey: queryKeys.allEnvelopes }),
+	]);
+};
+
+export const useCreateCategoryGroup = () => {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: api.createCategoryGroup,
+		onSuccess: () => invalidateGroups(qc),
+	});
+};
+
+export const useUpdateCategoryGroup = () => {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: ({ id, input }: { id: number; input: CategoryGroupUpdate }) =>
+			api.updateCategoryGroup(id, input),
+		onSuccess: () => invalidateGroups(qc),
+	});
+};
+
+export const useReorderCategoryGroups = () => {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: api.reorderCategoryGroups,
+		onSuccess: () => invalidateGroups(qc),
+	});
+};
+
+export const useDeleteCategoryGroup = () => {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: api.deleteCategoryGroup,
+		onSuccess: () => invalidateGroups(qc),
 	});
 };
 

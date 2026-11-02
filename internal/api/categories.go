@@ -12,6 +12,7 @@ import (
 type categoryInput struct {
 	Name     string `json:"name"`
 	IsIncome bool   `json:"is_income"`
+	GroupID  *int64 `json:"group_id"`
 }
 
 // validate normalizes the input in place and reports the first problem.
@@ -30,11 +31,13 @@ type categoryUpdate struct {
 	IsIncome *bool   `json:"is_income"`
 	// A "YYYY-MM" month to start rolling over from, or null to turn it off.
 	RolloverSince optional[*string] `json:"rollover_since"`
+	// A group id, or null to ungroup.
+	GroupID optional[*int64] `json:"group_id"`
 }
 
 // validate normalizes the input in place and reports the first problem.
 func (in *categoryUpdate) validate() error {
-	if in.Name == nil && in.IsIncome == nil && !in.RolloverSince.Set {
+	if in.Name == nil && in.IsIncome == nil && !in.RolloverSince.Set && !in.GroupID.Set {
 		return errors.New("nothing to update")
 	}
 	if in.Name != nil {
@@ -68,7 +71,7 @@ func (h *handlers) createCategory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	category, err := h.store.CreateCategory(r.Context(), store.CategoryInput{Name: in.Name, IsIncome: in.IsIncome})
+	category, err := h.store.CreateCategory(r.Context(), store.CategoryInput{Name: in.Name, IsIncome: in.IsIncome, GroupID: in.GroupID})
 	if err != nil {
 		writeStoreError(w, err)
 		return
@@ -96,6 +99,8 @@ func (h *handlers) updateCategory(w http.ResponseWriter, r *http.Request) {
 		IsIncome:      in.IsIncome,
 		SetRollover:   in.RolloverSince.Set,
 		RolloverSince: in.RolloverSince.Value,
+		SetGroup:      in.GroupID.Set,
+		GroupID:       in.GroupID.Value,
 	})
 	if err != nil {
 		writeStoreError(w, err)

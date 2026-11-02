@@ -34,19 +34,36 @@ export type Category = {
 	is_income: boolean;
 	/** "YYYY-MM" rollover starts from; null means off. */
 	rollover_since: string | null;
+	/** The category's group; null = ungrouped. Income categories have none. */
+	group_id: number | null;
 };
 
 export type CategoryInput = {
 	name: string;
 	is_income: boolean;
+	/** Optional; an income category can't have a group. */
+	group_id?: number | null;
 };
 
 /**
  * PATCH body: only the fields sent change. rollover_since: null turns
- * rollover off; setting a month starts it fresh from there.
+ * rollover off; setting a month starts it fresh from there. group_id: null
+ * ungroups.
  */
 export type CategoryUpdate = Partial<
 	CategoryInput & { rollover_since: string | null }
+>;
+
+/** A named, ordered label that expense categories sit under. */
+export type CategoryGroup = {
+	id: number;
+	name: string;
+	sort_order: number;
+};
+
+/** PATCH body: only the fields sent change. */
+export type CategoryGroupUpdate = Partial<
+	Pick<CategoryGroup, 'name' | 'sort_order'>
 >;
 
 /** Renaming or deleting this seeded category is a 409. */
@@ -130,6 +147,8 @@ export type Goals = {
 export type Envelope = {
 	category_id: number;
 	name: string;
+	/** null = ungrouped. */
+	group_id: number | null;
 	/** The month's cap, shown as a target; null = no cap. */
 	cap_cents: number | null;
 	/** Balance from earlier months (negative if overspent). */
@@ -138,6 +157,15 @@ export type Envelope = {
 	assigned_cents: number;
 	spent_cents: number;
 	/** carryover + assigned − spent. */
+	balance_cents: number;
+};
+
+/** A group's totals for the month: the sums over its envelopes. */
+export type EnvelopeGroup = {
+	id: number;
+	name: string;
+	assigned_cents: number;
+	spent_cents: number;
 	balance_cents: number;
 };
 
@@ -169,6 +197,8 @@ export type Envelopes = {
 	income_cents: number;
 	/** The month's total assigned, cards included. */
 	assigned_cents: number;
+	/** Every group, in order, with its totals. Empty groups are included. */
+	groups: EnvelopeGroup[];
 	/** Every expense category, sorted by name. All zeros before the start. */
 	envelopes: Envelope[];
 	/** Every credit account, sorted by name. Only owed_cents before the start. */

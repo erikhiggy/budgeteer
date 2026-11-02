@@ -5,7 +5,13 @@ import type { Account, Category, Transaction } from '../../api/types';
 import { TransactionTable } from './TransactionTable';
 
 const categories: Category[] = [
-	{ id: 3, name: 'Groceries', is_income: false, rollover_since: null },
+	{
+		id: 3,
+		name: 'Groceries',
+		is_income: false,
+		rollover_since: null,
+		group_id: null,
+	},
 ];
 const accounts: Account[] = [
 	{ id: 7, name: 'Checking', type: 'checking', balance_cents: 0 },
