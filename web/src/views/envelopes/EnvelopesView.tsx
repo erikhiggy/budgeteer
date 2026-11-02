@@ -114,6 +114,7 @@ const MonthEnvelopes = ({ month }: { month: string }) => {
 						onFillFromCaps={() => void run(fillFromCaps.mutateAsync(month))}
 					/>
 					<EnvelopesTable
+						groups={envelopes.data.groups}
 						envelopes={envelopes.data.envelopes}
 						cards={envelopes.data.cards}
 						uncategorizedCents={envelopes.data.uncategorized_cents}

@@ -3,6 +3,8 @@ import type {
 	AccountInput,
 	AccountUpdate,
 	Category,
+	CategoryGroup,
+	CategoryGroupUpdate,
 	CategoryInput,
 	CategoryUpdate,
 	DateRange,
@@ -95,6 +97,19 @@ export const api = {
 		request<Category>('PATCH', `/api/categories/${id}`, input),
 	deleteCategory: (id: number) =>
 		request<void>('DELETE', `/api/categories/${id}`),
+
+	listCategoryGroups: () =>
+		request<CategoryGroup[]>('GET', '/api/category-groups'),
+	createCategoryGroup: (name: string) =>
+		request<CategoryGroup>('POST', '/api/category-groups', { name }),
+	updateCategoryGroup: (id: number, input: CategoryGroupUpdate) =>
+		request<CategoryGroup>('PATCH', `/api/category-groups/${id}`, input),
+	/** ids must list every group once; returns them in the new order. */
+	reorderCategoryGroups: (ids: number[]) =>
+		request<CategoryGroup[]>('PUT', '/api/category-groups/order', { ids }),
+	/** Its categories become ungrouped. */
+	deleteCategoryGroup: (id: number) =>
+		request<void>('DELETE', `/api/category-groups/${id}`),
 
 	listTransactions: (accountId: number, range: DateRange = {}) =>
 		request<Transaction[]>(

@@ -86,3 +86,33 @@
 .section th {
 	border-top: 1px solid var(--color-border);
 }
+
+/* A group's header row: the name folds the group, the totals stay visible. */
+.group th,
+.group td {
+	background: var(--color-bg);
+	border-top: 1px solid var(--color-border);
+}
+
+.group th {
+	font-size: var(--text-base);
+	color: var(--color-text);
+}
+
+.groupToggle {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	padding: 0;
+	font: inherit;
+	font-weight: 600;
+	color: inherit;
+	background: none;
+	border: none;
+	cursor: pointer;
+}
+
+.chevron {
+	width: 1em;
+	color: var(--color-text-muted);
+}

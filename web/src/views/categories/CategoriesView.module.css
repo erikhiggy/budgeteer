@@ -15,6 +15,10 @@
 	min-width: 240px;
 }
 
+.item {
+	position: relative;
+}
+
 .item,
 .rename {
 	display: flex;
@@ -34,10 +38,19 @@
 	height: 28px;
 }
 
-/* Revealed on hover or keyboard focus, so the list stays quiet. */
+/*
+ * Revealed on hover or keyboard focus, so the list stays quiet. Laid over the
+ * end of the row so they take no room while hidden.
+ */
 .actions {
+	position: absolute;
+	right: 0;
 	display: flex;
-	gap: var(--space-1);
+	align-items: center;
+	gap: 0;
+	padding-left: var(--space-2);
+	white-space: nowrap;
+	background: var(--color-surface);
 	opacity: 0;
 }
 
@@ -61,7 +74,7 @@
 
 .columns {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
 	gap: var(--space-4);
 }
 
@@ -98,4 +111,24 @@
 .muted {
 	color: var(--color-text-muted);
 	font-size: var(--text-sm);
+}
+
+.section + .section {
+	margin-top: var(--space-3);
+}
+
+.subheading {
+	margin: var(--space-2) 0 var(--space-1);
+	font-size: var(--text-sm);
+	font-weight: 600;
+}
+
+.groupSelect {
+	height: 24px;
+	font-size: var(--text-sm);
+}
+
+/* In the hover actions, room is tight; the full name shows when it opens. */
+.actions .groupSelect {
+	max-width: 76px;
 }
