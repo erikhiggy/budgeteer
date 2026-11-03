@@ -12,10 +12,12 @@ import (
 var AccountTypes = []string{"checking", "savings", "credit", "cash", "investment"}
 
 type Account struct {
-	ID           int64  `json:"id"`
-	Name         string `json:"name"`
-	Type         string `json:"type"`
-	BalanceCents int64  `json:"balance_cents"`
+	ID                    int64  `json:"id"`
+	Name                  string `json:"name"`
+	Type                  string `json:"type"`
+	BalanceCents          int64  `json:"balance_cents"`
+	ClearedBalanceCents   int64  `json:"cleared_balance_cents"`
+	UnclearedBalanceCents int64  `json:"uncleared_balance_cents"`
 }
 
 type AccountInput struct {
@@ -33,11 +35,25 @@ type AccountUpdate struct {
 	Type *string
 }
 
+// accountColumns selects an Account from accounts a, with its balances summed
+// over its transactions t. Scan it with scanAccount, and add a GROUP BY a.id.
+const accountColumns = `
+	a.id, a.name, a.type,
+	COALESCE(SUM(t.amount_cents), 0),
+	COALESCE(SUM(CASE WHEN t.cleared = 1 THEN t.amount_cents ELSE 0 END), 0),
+	COALESCE(SUM(CASE WHEN t.cleared = 0 THEN t.amount_cents ELSE 0 END), 0)
+	FROM accounts a
+	LEFT JOIN transactions t ON t.account_id = a.id`
+
+func scanAccount(row interface{ Scan(...any) error }) (Account, error) {
+	var a Account
+	err := row.Scan(&a.ID, &a.Name, &a.Type, &a.BalanceCents, &a.ClearedBalanceCents, &a.UnclearedBalanceCents)
+	return a, err
+}
+
 func (s *Store) ListAccounts(ctx context.Context) ([]Account, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT a.id, a.name, a.type, COALESCE(SUM(t.amount_cents), 0)
-		FROM accounts a
-		LEFT JOIN transactions t ON t.account_id = a.id
+		SELECT `+accountColumns+`
 		GROUP BY a.id
 		ORDER BY a.name COLLATE NOCASE`)
 	if err != nil {
@@ -47,8 +63,8 @@ func (s *Store) ListAccounts(ctx context.Context) ([]Account, error) {
 
 	accounts := []Account{} // non-nil so it encodes as [] rather than null
 	for rows.Next() {
-		var a Account
-		if err := rows.Scan(&a.ID, &a.Name, &a.Type, &a.BalanceCents); err != nil {
+		a, err := scanAccount(rows)
+		if err != nil {
 			return nil, err
 		}
 		accounts = append(accounts, a)
@@ -59,13 +75,10 @@ func (s *Store) ListAccounts(ctx context.Context) ([]Account, error) {
 // getAccount returns the account with id, including its balance, or a
 // NotFound error.
 func (s *Store) getAccount(ctx context.Context, id int64) (Account, error) {
-	var a Account
-	err := s.db.QueryRowContext(ctx, `
-		SELECT a.id, a.name, a.type, COALESCE(SUM(t.amount_cents), 0)
-		FROM accounts a
-		LEFT JOIN transactions t ON t.account_id = a.id
+	a, err := scanAccount(s.db.QueryRowContext(ctx, `
+		SELECT `+accountColumns+`
 		WHERE a.id = ?
-		GROUP BY a.id`, id).Scan(&a.ID, &a.Name, &a.Type, &a.BalanceCents)
+		GROUP BY a.id`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Account{}, errorf(NotFound, "no account with id %d", id)
 	}
@@ -102,8 +115,8 @@ func (s *Store) CreateAccount(ctx context.Context, in AccountInput) (Account, er
 			return Account{}, fmt.Errorf("find %q category: %w", OpeningBalanceCategory, err)
 		}
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO transactions (account_id, category_id, date, payee, amount_cents) VALUES (?, ?, ?, ?, ?)`,
-			id, categoryID, in.OpeningBalanceDate, OpeningBalanceCategory, in.OpeningBalanceCents); err != nil {
+			`INSERT INTO transactions (account_id, category_id, date, payee, amount_cents, cleared) VALUES (?, ?, ?, ?, ?, ?)`,
+			id, categoryID, in.OpeningBalanceDate, OpeningBalanceCategory, in.OpeningBalanceCents, true); err != nil {
 			return Account{}, fmt.Errorf("insert opening balance: %w", err)
 		}
 	}
@@ -111,7 +124,7 @@ func (s *Store) CreateAccount(ctx context.Context, in AccountInput) (Account, er
 	if err := tx.Commit(); err != nil {
 		return Account{}, err
 	}
-	return Account{ID: id, Name: in.Name, Type: in.Type, BalanceCents: in.OpeningBalanceCents}, nil
+	return Account{ID: id, Name: in.Name, Type: in.Type, BalanceCents: in.OpeningBalanceCents, ClearedBalanceCents: in.OpeningBalanceCents, UnclearedBalanceCents: 0}, nil
 }
 
 // UpdateAccount expects in to be validated already (see package api), with at

@@ -173,7 +173,7 @@ func TestUpdateTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := in.transaction(created.ID); got != want {
+	if want := in.transaction(created.ID, false); got != want {
 		t.Errorf("updated = %+v, want %+v", got, want)
 	}
 	list, err := s.ListTransactions(ctx, TransactionFilter{AccountID: b.ID})
@@ -224,4 +224,122 @@ func TestDeleteTransaction(t *testing.T) {
 		t.Errorf("list = %+v, want empty", list)
 	}
 	wantKind(t, s.DeleteTransaction(ctx, created.ID), NotFound)
+}
+
+func TestNewTransactionsAreUncleared(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+	a, err := s.CreateAccount(ctx, AccountInput{Name: "Checking", Type: "checking"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	created, err := s.CreateTransaction(ctx, TransactionInput{AccountID: a.ID, Date: "2026-11-01", AmountCents: -450})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Cleared {
+		t.Error("created transaction is cleared, want uncleared")
+	}
+	got, err := s.ListTransactions(ctx, TransactionFilter{AccountID: a.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Cleared {
+		t.Errorf("listed = %+v, want one uncleared transaction", got)
+	}
+}
+
+func TestSetCleared(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+	a, err := s.CreateAccount(ctx, AccountInput{Name: "Checking", Type: "checking"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := s.CreateTransaction(ctx, TransactionInput{AccountID: a.ID, Date: "2026-11-01", AmountCents: -100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := s.CreateTransaction(ctx, TransactionInput{AccountID: a.ID, Date: "2026-11-02", Payee: "Cafe", Note: "latte", AmountCents: -450})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.SetCleared(ctx, tx.ID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := tx
+	want.Cleared = true
+	if got != want {
+		t.Errorf("SetCleared = %+v, want %+v", got, want)
+	}
+
+	// Setting the same value again changes nothing.
+	if again, err := s.SetCleared(ctx, tx.ID, true); err != nil || again != want {
+		t.Errorf("repeat SetCleared = %+v, %v; want %+v", again, err, want)
+	}
+
+	// Only that row changed.
+	listed, err := s.ListTransactions(ctx, TransactionFilter{AccountID: a.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range listed {
+		if wantCleared := l.ID == tx.ID; l.Cleared != wantCleared {
+			t.Errorf("transaction %d cleared = %v, want %v", l.ID, l.Cleared, wantCleared)
+		}
+	}
+	if other.Cleared {
+		t.Fatal("test setup: other started cleared")
+	}
+
+	// And it can be cleared back.
+	back, err := s.SetCleared(ctx, tx.ID, false)
+	if err != nil || back.Cleared {
+		t.Errorf("unclearing = %+v, %v; want uncleared", back, err)
+	}
+}
+
+func TestSetClearedUnknownIDIsNotFound(t *testing.T) {
+	s, _ := newTestStore(t)
+	_, err := s.SetCleared(context.Background(), 999, true)
+	wantKind(t, err, NotFound)
+}
+
+func TestUpdateTransactionKeepsCleared(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+	a, err := s.CreateAccount(ctx, AccountInput{Name: "Checking", Type: "checking"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.CreateAccount(ctx, AccountInput{Name: "Savings", Type: "savings"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := s.CreateTransaction(ctx, TransactionInput{AccountID: a.ID, Date: "2026-11-01", AmountCents: -450})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetCleared(ctx, tx.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Editing every field, even moving accounts, leaves the flag alone.
+	got, err := s.UpdateTransaction(ctx, tx.ID, TransactionInput{AccountID: b.ID, Date: "2026-11-03", Payee: "Bakery", AmountCents: -600, Note: "bread"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Cleared {
+		t.Errorf("updated = %+v, want it to stay cleared", got)
+	}
+	listed, err := s.ListTransactions(ctx, TransactionFilter{AccountID: b.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || !listed[0].Cleared || listed[0].AmountCents != -600 {
+		t.Errorf("listed = %+v, want the edited transaction, still cleared", listed)
+	}
 }

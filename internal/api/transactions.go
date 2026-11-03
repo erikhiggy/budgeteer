@@ -21,6 +21,12 @@ type transactionInput struct {
 	Note        string `json:"note"`
 }
 
+// clearedInput is the JSON body for PUT /api/transactions/{id}/cleared. A nil
+// Cleared wasn't sent.
+type clearedInput struct {
+	Cleared *bool `json:"cleared"`
+}
+
 // validate normalizes the input in place and reports the first problem.
 func (in *transactionInput) validate() error {
 	if in.Date == "" {
@@ -129,6 +135,30 @@ func (h *handlers) updateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	transaction, err := h.store.UpdateTransaction(r.Context(), id, in.toStore())
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, transaction)
+}
+
+// setCleared sets a transaction's cleared flag to the value sent.
+func (h *handlers) setCleared(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	var in clearedInput
+	if err := readJSON(w, r, &in); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if in.Cleared == nil {
+		writeError(w, http.StatusBadRequest, "cleared is required")
+		return
+	}
+	transaction, err := h.store.SetCleared(r.Context(), id, *in.Cleared)
 	if err != nil {
 		writeStoreError(w, err)
 		return

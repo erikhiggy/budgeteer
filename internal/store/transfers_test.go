@@ -241,3 +241,63 @@ func TestCreateTransferRules(t *testing.T) {
 		t.Errorf("%d transfers and %d transactions left, want none", transfers, legs)
 	}
 }
+
+func TestTransferLegsStartUnclearedAndClearIndependently(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+	checking, savings := twoAccounts(t, s)
+
+	tr, err := s.CreateTransfer(ctx, TransferInput{AccountID: checking.ID, OtherAccountID: savings.ID, Date: "2026-11-01", Payee: "Savings plan", AmountCents: -20000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Legs[0].Cleared || tr.Legs[1].Cleared {
+		t.Errorf("legs = %+v, want both uncleared", tr.Legs)
+	}
+
+	// Clearing the checking leg leaves the savings leg alone.
+	got, err := s.SetCleared(ctx, tr.Legs[0].ID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Cleared || got.TransferID == nil || got.TransferAccountID == nil || *got.TransferAccountID != savings.ID {
+		t.Errorf("cleared leg = %+v, want it cleared with its transfer fields intact", got)
+	}
+	accounts, err := s.ListAccounts(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := accounts[0]; c.ClearedBalanceCents != -20000 || c.UnclearedBalanceCents != 0 {
+		t.Errorf("checking = %+v, want -20000 cleared", c)
+	}
+	if sv := accounts[1]; sv.ClearedBalanceCents != 0 || sv.UnclearedBalanceCents != 20000 {
+		t.Errorf("savings = %+v, want 20000 uncleared", sv)
+	}
+}
+
+func TestUpdateTransferKeepsEachLegsCleared(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+	checking, savings := twoAccounts(t, s)
+	out, in := createTestTransfer(t, s, checking.ID, savings.ID, "2026-11-01", -20000)
+	if _, err := s.SetCleared(ctx, out, true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Editing from either side syncs the other fields but not the flags.
+	if _, err := s.UpdateTransaction(ctx, in, TransactionInput{AccountID: savings.ID, Date: "2026-11-03", Payee: "Rainy day", AmountCents: 15000}); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		account int64
+		cleared bool
+	}{{checking.ID, true}, {savings.ID, false}} {
+		legs, err := s.ListTransactions(ctx, TransactionFilter{AccountID: c.account})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(legs) != 1 || legs[0].Cleared != c.cleared || legs[0].Date != "2026-11-03" {
+			t.Errorf("account %d legs = %+v, want one edited leg with cleared = %v", c.account, legs, c.cleared)
+		}
+	}
+}

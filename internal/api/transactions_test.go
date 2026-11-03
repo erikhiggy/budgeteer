@@ -247,3 +247,121 @@ func TestDeleteTransaction(t *testing.T) {
 	wantNoContent(t, h, "DELETE", target)
 	wantError(t, h, "DELETE", target, nil, http.StatusNotFound)
 }
+
+func TestSetCleared(t *testing.T) {
+	h := newTestServer(t, builtDist)
+	a := createTestAccount(t, h, "Checking")
+	tx := createTestTransaction(t, h, map[string]any{"account_id": a.ID, "date": "2026-11-02", "payee": "Cafe", "amount_cents": -450})
+	if tx.Cleared {
+		t.Fatal("new transaction is cleared, want uncleared")
+	}
+	target := fmt.Sprintf("/api/transactions/%d/cleared", tx.ID)
+
+	res, raw := doJSON(t, h, "PUT", target, map[string]bool{"cleared": true})
+	wantStatus(t, res, raw, http.StatusOK)
+	want := tx
+	want.Cleared = true
+	if got := decode[store.Transaction](t, raw); got != want {
+		t.Errorf("cleared = %+v, want %+v", got, want)
+	}
+
+	// Repeating the request changes nothing.
+	res, raw = doJSON(t, h, "PUT", target, map[string]bool{"cleared": true})
+	wantStatus(t, res, raw, http.StatusOK)
+	if got := decode[store.Transaction](t, raw); got != want {
+		t.Errorf("repeated = %+v, want %+v", got, want)
+	}
+
+	// The list and the account's balances follow.
+	if list := listTestTransactions(t, h, a.ID); len(list) != 1 || !list[0].Cleared {
+		t.Errorf("list = %+v, want the transaction cleared", list)
+	}
+	res, raw = doJSON(t, h, "GET", "/api/accounts", nil)
+	wantStatus(t, res, raw, http.StatusOK)
+	if got := decode[[]store.Account](t, raw)[0]; got.BalanceCents != -450 || got.ClearedBalanceCents != -450 || got.UnclearedBalanceCents != 0 {
+		t.Errorf("account = %+v, want -450 cleared", got)
+	}
+
+	res, raw = doJSON(t, h, "PUT", target, map[string]bool{"cleared": false})
+	wantStatus(t, res, raw, http.StatusOK)
+	if got := decode[store.Transaction](t, raw); got.Cleared {
+		t.Errorf("unclearing = %+v, want uncleared", got)
+	}
+}
+
+func TestSetClearedErrors(t *testing.T) {
+	h := newTestServer(t, builtDist)
+	a := createTestAccount(t, h, "Checking")
+	tx := createTestTransaction(t, h, map[string]any{"account_id": a.ID, "date": "2026-11-02", "amount_cents": -450})
+	target := fmt.Sprintf("/api/transactions/%d/cleared", tx.ID)
+
+	cases := []struct {
+		name string
+		body any
+		want int
+	}{
+		{"missing cleared", map[string]any{}, http.StatusBadRequest},
+		{"null cleared", map[string]any{"cleared": nil}, http.StatusBadRequest},
+		{"not a boolean", map[string]any{"cleared": "yes"}, http.StatusBadRequest},
+		{"a number", map[string]any{"cleared": 1}, http.StatusBadRequest},
+		{"unknown field", map[string]any{"cleared": true, "memo": "x"}, http.StatusBadRequest},
+		{"not an object", "true", http.StatusBadRequest},
+		{"no body", nil, http.StatusBadRequest},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			wantError(t, h, "PUT", target, c.body, c.want)
+		})
+	}
+	wantError(t, h, "PUT", "/api/transactions/999/cleared", map[string]bool{"cleared": true}, http.StatusNotFound)
+	wantError(t, h, "PUT", "/api/transactions/abc/cleared", map[string]bool{"cleared": true}, http.StatusBadRequest)
+
+	// None of the failures changed it.
+	if list := listTestTransactions(t, h, a.ID); list[0].Cleared {
+		t.Errorf("list = %+v, want it still uncleared", list)
+	}
+}
+
+func TestClearedWireFormat(t *testing.T) {
+	h := newTestServer(t, builtDist)
+	a := createTestAccount(t, h, "Checking")
+	createTestTransaction(t, h, map[string]any{"account_id": a.ID, "date": "2026-11-02", "amount_cents": -450})
+
+	res, raw := doJSON(t, h, "GET", fmt.Sprintf("/api/transactions?account_id=%d", a.ID), nil)
+	wantStatus(t, res, raw, http.StatusOK)
+	list := decode[[]map[string]any](t, raw)
+	if v, ok := list[0]["cleared"]; !ok || v != false {
+		t.Errorf("cleared = %v (present: %v), want false", v, ok)
+	}
+}
+
+// cleared isn't part of the create and update bodies; only the cleared route
+// changes it.
+func TestClearedIsNotAcceptedOnCreateOrUpdate(t *testing.T) {
+	h := newTestServer(t, builtDist)
+	a := createTestAccount(t, h, "Checking")
+	b := createTestAccount(t, h, "Savings")
+	tx := createTestTransaction(t, h, map[string]any{"account_id": a.ID, "date": "2026-11-02", "amount_cents": -450})
+
+	wantError(t, h, "POST", "/api/transactions",
+		map[string]any{"account_id": a.ID, "date": "2026-11-02", "amount_cents": -1, "cleared": true}, http.StatusBadRequest)
+	wantError(t, h, "PATCH", fmt.Sprintf("/api/transactions/%d", tx.ID),
+		map[string]any{"account_id": a.ID, "date": "2026-11-02", "amount_cents": -1, "cleared": true}, http.StatusBadRequest)
+	wantError(t, h, "POST", "/api/transfers",
+		map[string]any{"account_id": a.ID, "other_account_id": b.ID, "date": "2026-11-02", "amount_cents": -1, "cleared": true}, http.StatusBadRequest)
+}
+
+func TestUpdateTransactionKeepsCleared(t *testing.T) {
+	h := newTestServer(t, builtDist)
+	a := createTestAccount(t, h, "Checking")
+	tx := createTestTransaction(t, h, map[string]any{"account_id": a.ID, "date": "2026-11-02", "amount_cents": -450})
+	res, raw := doJSON(t, h, "PUT", fmt.Sprintf("/api/transactions/%d/cleared", tx.ID), map[string]bool{"cleared": true})
+	wantStatus(t, res, raw, http.StatusOK)
+
+	res, raw = doJSON(t, h, "PATCH", fmt.Sprintf("/api/transactions/%d", tx.ID),
+		map[string]any{"account_id": a.ID, "date": "2026-11-03", "payee": "Bakery", "amount_cents": -600})
+	wantStatus(t, res, raw, http.StatusOK)
+	if got := decode[store.Transaction](t, raw); !got.Cleared || got.AmountCents != -600 {
+		t.Errorf("updated = %+v, want the edit applied and still cleared", got)
+	}
+}

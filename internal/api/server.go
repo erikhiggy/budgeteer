@@ -52,6 +52,7 @@ func New(db *sql.DB, dist fs.FS) http.Handler {
 	mux.HandleFunc("POST /api/transactions", h.createTransaction)
 	mux.HandleFunc("PATCH /api/transactions/{id}", h.updateTransaction)
 	mux.HandleFunc("DELETE /api/transactions/{id}", h.deleteTransaction)
+	mux.HandleFunc("PUT /api/transactions/{id}/cleared", h.setCleared)
 	mux.HandleFunc("GET /api/payees", h.listPayees)
 	// Editing and deleting transfer legs go through the transactions routes.
 	mux.HandleFunc("POST /api/transfers", h.createTransfer)
