@@ -122,6 +122,8 @@ export const api = {
 		request<Transaction>('PATCH', `/api/transactions/${id}`, input),
 	deleteTransaction: (id: number) =>
 		request<void>('DELETE', `/api/transactions/${id}`),
+	setCleared: (id: number, cleared: boolean) =>
+		request<Transaction>('PUT', `/api/transactions/${id}/cleared`, { cleared }),
 	createTransfer: (input: TransferInput) =>
 		request<Transfer>('POST', '/api/transfers', input),
 

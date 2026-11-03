@@ -15,7 +15,12 @@ export type Account = {
 	id: number;
 	name: string;
 	type: AccountType;
+	/** The working balance: cleared + uncleared. */
 	balance_cents: number;
+	/** The sum of the cleared transactions; compare it to a bank statement. */
+	cleared_balance_cents: number;
+	/** The sum of the transactions that haven't cleared yet. */
+	uncleared_balance_cents: number;
 };
 
 export type AccountInput = {
@@ -83,6 +88,12 @@ export type Transaction = {
 	transfer_id: number | null;
 	/** The other leg's account. */
 	transfer_account_id: number | null;
+	/**
+	 * False until the transaction has posted at the bank. Each leg of a
+	 * transfer has its own flag. Changed only by the cleared route, never by
+	 * a transaction PATCH.
+	 */
+	cleared: boolean;
 };
 
 /**
@@ -91,7 +102,7 @@ export type Transaction = {
  */
 export type TransactionInput = Omit<
 	Transaction,
-	'id' | 'transfer_id' | 'transfer_account_id'
+	'id' | 'transfer_id' | 'transfer_account_id' | 'cleared'
 >;
 
 /**

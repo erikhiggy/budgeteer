@@ -13,7 +13,10 @@ type Props = {
 	onDeleted: () => void;
 };
 
-/** The selected account's name and balance, with rename and delete. */
+/**
+ * The selected account's name and its cleared, uncleared and working
+ * balances, with rename and delete.
+ */
 export const AccountHeader = ({ account, onDeleted }: Props) => {
 	const [editing, setEditing] = useState(false);
 	const remove = useDeleteAccount();
@@ -25,38 +28,48 @@ export const AccountHeader = ({ account, onDeleted }: Props) => {
 	}
 
 	return (
-		<div className={styles.header}>
-			<h2 className={styles.name}>{account.name}</h2>
-			<span className={styles.type}>{account.type}</span>
-			<span
-				className={cx(
-					styles.balance,
-					account.balance_cents < 0 && styles.negative,
+		<>
+			<div className={styles.header}>
+				<h2 className={styles.name}>{account.name}</h2>
+				<span className={styles.type}>{account.type}</span>
+				<span className={styles.spacer} />
+				<button
+					type='button'
+					className={cx(buttons.quiet, buttons.small)}
+					onClick={() => setEditing(true)}
+				>
+					Edit account
+				</button>
+				<ConfirmButton
+					aria-label='Delete account'
+					onConfirm={() => remove.mutate(account.id, { onSuccess: onDeleted })}
+					disabled={remove.isPending}
+				>
+					Delete account
+				</ConfirmButton>
+				{remove.error && (
+					<p className={styles.error} role='alert'>
+						{remove.error.message}
+					</p>
 				)}
-			>
-				Balance {formatCents(account.balance_cents)}
-			</span>
-			<span className={styles.spacer} />
-			<button
-				type='button'
-				className={cx(buttons.quiet, buttons.small)}
-				onClick={() => setEditing(true)}
-			>
-				Edit account
-			</button>
-			<ConfirmButton
-				aria-label='Delete account'
-				onConfirm={() => remove.mutate(account.id, { onSuccess: onDeleted })}
-				disabled={remove.isPending}
-			>
-				Delete account
-			</ConfirmButton>
-			{remove.error && (
-				<p className={styles.error} role='alert'>
-					{remove.error.message}
-				</p>
-			)}
-		</div>
+			</div>
+			<div className={styles.balances}>
+				<Balance label='Working' cents={account.balance_cents} />
+				<div className={styles.clearedAndUncleared}>
+					<Balance label='Cleared' cents={account.cleared_balance_cents} />
+					<Balance label='Uncleared' cents={account.uncleared_balance_cents} />
+				</div>
+			</div>
+		</>
+	);
+};
+
+/** One of the account's three balances. Cleared + Uncleared = Working. */
+const Balance = ({ label, cents }: { label: string; cents: number }) => {
+	return (
+		<span className={cx(styles.balance, cents < 0 && styles.negative)}>
+			{label} {formatCents(cents)}
+		</span>
 	);
 };
 

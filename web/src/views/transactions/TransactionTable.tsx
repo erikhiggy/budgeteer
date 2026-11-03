@@ -23,9 +23,11 @@ type Props = {
 	/** Resolves when saved; rejects with an Error whose message is shown. */
 	onUpdate: (before: Transaction, input: TransactionInput) => Promise<unknown>;
 	onDelete: (tx: Transaction) => void;
+	/** Sets the transaction's cleared flag to the value given. */
+	onClear: (tx: Transaction, cleared: boolean) => void;
 };
 
-const COLUMNS = 6;
+const COLUMNS = 7;
 
 export const TransactionTable = ({
 	transactions,
@@ -34,6 +36,7 @@ export const TransactionTable = ({
 	payees,
 	onUpdate,
 	onDelete,
+	onClear,
 }: Props) => {
 	const categoryName = new Map(categories.map((c) => [c.id, c.name]));
 	const accountName = new Map(accounts.map((a) => [a.id, a.name]));
@@ -53,6 +56,10 @@ export const TransactionTable = ({
 		<table className={styles.table}>
 			<thead>
 				<tr>
+					<th className={styles.cleared}>
+						<span aria-hidden='true'>C</span>
+						<span className={styles.visuallyHidden}>Cleared</span>
+					</th>
 					<th className={styles.date}>Date</th>
 					<th>Payee</th>
 					<th>Category</th>
@@ -92,6 +99,17 @@ export const TransactionTable = ({
 						</tr>
 					) : (
 						<tr key={tx.id}>
+							<td className={styles.cleared}>
+								<button
+									type='button'
+									className={cx(buttons.small, styles.clearToggle)}
+									aria-pressed={tx.cleared}
+									aria-label={`Cleared ${describe(tx)}`}
+									onClick={() => onClear(tx, !tx.cleared)}
+								>
+									c
+								</button>
+							</td>
 							<td className={styles.date}>{formatDate(tx.date)}</td>
 							<td>{tx.payee}</td>
 							<td className={styles.muted}>{categoryCell(tx)}</td>
