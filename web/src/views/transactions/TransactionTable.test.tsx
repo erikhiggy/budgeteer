@@ -14,8 +14,22 @@ const categories: Category[] = [
 	},
 ];
 const accounts: Account[] = [
-	{ id: 7, name: 'Checking', type: 'checking', balance_cents: 0 },
-	{ id: 9, name: 'Savings', type: 'savings', balance_cents: 0 },
+	{
+		id: 7,
+		name: 'Checking',
+		type: 'checking',
+		balance_cents: 0,
+		cleared_balance_cents: 0,
+		uncleared_balance_cents: 0,
+	},
+	{
+		id: 9,
+		name: 'Savings',
+		type: 'savings',
+		balance_cents: 0,
+		cleared_balance_cents: 0,
+		uncleared_balance_cents: 0,
+	},
 ];
 const transactions: Transaction[] = [
 	{
@@ -28,6 +42,7 @@ const transactions: Transaction[] = [
 		note: '',
 		transfer_id: null,
 		transfer_account_id: null,
+		cleared: false,
 	},
 	{
 		id: 2,
@@ -39,6 +54,7 @@ const transactions: Transaction[] = [
 		note: '',
 		transfer_id: null,
 		transfer_account_id: null,
+		cleared: true,
 	},
 ];
 
@@ -46,6 +62,7 @@ const setup = () => {
 	const user = userEvent.setup();
 	const onUpdate = vi.fn().mockResolvedValue(undefined);
 	const onDelete = vi.fn();
+	const onClear = vi.fn();
 	render(
 		<TransactionTable
 			transactions={transactions}
@@ -54,9 +71,10 @@ const setup = () => {
 			payees={[]}
 			onUpdate={onUpdate}
 			onDelete={onDelete}
+			onClear={onClear}
 		/>,
 	);
-	return { user, onUpdate, onDelete };
+	return { user, onUpdate, onDelete, onClear };
 };
 
 describe('TransactionTable', () => {
@@ -139,6 +157,7 @@ describe('TransactionTable', () => {
 			note: '',
 			transfer_id: id,
 			transfer_account_id: 9,
+			cleared: false,
 		});
 		render(
 			<TransactionTable
@@ -148,9 +167,47 @@ describe('TransactionTable', () => {
 				payees={[]}
 				onUpdate={vi.fn()}
 				onDelete={vi.fn()}
+				onClear={vi.fn()}
 			/>,
 		);
 		expect(screen.getByText('Transfer → Savings')).toBeInTheDocument();
 		expect(screen.getByText('Transfer ← Savings')).toBeInTheDocument();
+	});
+
+	it('shows each transaction’s cleared state on its c button', () => {
+		setup();
+		expect(
+			screen.getByRole('button', { name: /^Cleared Trader Joe’s/ }),
+		).toHaveAttribute('aria-pressed', 'false');
+		expect(
+			screen.getByRole('button', { name: /^Cleared Paycheck/ }),
+		).toHaveAttribute('aria-pressed', 'true');
+	});
+
+	it('clicking c on an uncleared transaction clears it', async () => {
+		const { user, onClear } = setup();
+		await user.click(
+			screen.getByRole('button', { name: /^Cleared Trader Joe’s/ }),
+		);
+		expect(onClear).toHaveBeenCalledExactlyOnceWith(transactions[0], true);
+	});
+
+	it('clicking c on a cleared transaction unclears it', async () => {
+		const { user, onClear } = setup();
+		await user.click(screen.getByRole('button', { name: /^Cleared Paycheck/ }));
+		expect(onClear).toHaveBeenCalledExactlyOnceWith(transactions[1], false);
+	});
+
+	it('has no c button on the row being edited', async () => {
+		const { user } = setup();
+		await user.click(
+			screen.getByRole('button', { name: /^Edit Trader Joe’s/ }),
+		);
+		expect(
+			screen.queryByRole('button', { name: /^Cleared Trader Joe’s/ }),
+		).toBeNull();
+		expect(
+			screen.getByRole('button', { name: /^Cleared Paycheck/ }),
+		).toBeInTheDocument();
 	});
 });

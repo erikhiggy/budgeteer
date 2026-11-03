@@ -246,6 +246,21 @@ export const useUpdateTransaction = () => {
 	});
 };
 
+export const useSetCleared = () => {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: ({ tx, cleared }: { tx: Transaction; cleared: boolean }) =>
+			api.setCleared(tx.id, cleared),
+		onSuccess: (tx) =>
+			Promise.all([
+				qc.invalidateQueries({
+					queryKey: queryKeys.transactions(tx.account_id),
+				}),
+				qc.invalidateQueries({ queryKey: queryKeys.accounts }),
+			]),
+	});
+};
+
 export const useDeleteTransaction = () => {
 	const qc = useQueryClient();
 	return useMutation({

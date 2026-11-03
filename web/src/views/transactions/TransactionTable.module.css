@@ -34,6 +34,32 @@
 	white-space: nowrap;
 }
 
+.cleared {
+	width: 56px;
+	text-align: center !important;
+}
+
+/* The "c": an outline until the transaction clears, then filled. */
+.clearToggle {
+	width: 26px;
+	padding: 0;
+	border-color: var(--color-border);
+	background: transparent;
+	color: var(--color-text-muted);
+}
+
+.clearToggle:hover:not(:disabled) {
+	border-color: var(--color-accent);
+	color: var(--color-accent);
+}
+
+.clearToggle[aria-pressed='true'],
+.clearToggle[aria-pressed='true']:hover:not(:disabled) {
+	border-color: var(--color-accent);
+	background: var(--color-accent);
+	color: var(--color-accent-contrast);
+}
+
 .amount {
 	width: 130px;
 	text-align: right !important;

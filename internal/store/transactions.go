@@ -19,20 +19,21 @@ type Transaction struct {
 	// Set on both legs of a transfer; nil on ordinary transactions.
 	TransferID        *int64 `json:"transfer_id"`
 	TransferAccountID *int64 `json:"transfer_account_id"` // the other leg's account
+	Cleared           bool   `json:"cleared"`
 }
 
 // transactionColumns selects a Transaction from transactions t, joined to the
 // other leg o of its transfer (if any). Scan it with scanTransaction.
 const transactionColumns = `
 	t.id, t.account_id, t.category_id, t.date, t.payee, t.amount_cents, t.note,
-	t.transfer_id, o.account_id
+	t.transfer_id, o.account_id, t.cleared
 	FROM transactions t
 	LEFT JOIN transactions o ON o.transfer_id = t.transfer_id AND o.id <> t.id`
 
 func scanTransaction(row interface{ Scan(...any) error }) (Transaction, error) {
 	var t Transaction
 	err := row.Scan(&t.ID, &t.AccountID, &t.CategoryID, &t.Date, &t.Payee, &t.AmountCents, &t.Note,
-		&t.TransferID, &t.TransferAccountID)
+		&t.TransferID, &t.TransferAccountID, &t.Cleared)
 	return t, err
 }
 
@@ -129,7 +130,7 @@ func (s *Store) CreateTransaction(ctx context.Context, in TransactionInput) (Tra
 	if err != nil {
 		return Transaction{}, err
 	}
-	return in.transaction(id), nil
+	return in.transaction(id, false), nil
 }
 
 // UpdateTransaction replaces every field of the transaction with id. It
@@ -164,7 +165,7 @@ func (s *Store) UpdateTransaction(ctx context.Context, id int64, in TransactionI
 	if err := wantOneRow(res, "transaction", id); err != nil {
 		return Transaction{}, err
 	}
-	return in.transaction(id), nil
+	return in.transaction(id, current.Cleared), nil
 }
 
 // updateTransfer applies in to leg and the other leg of its transfer: date,
@@ -222,6 +223,19 @@ func (s *Store) DeleteTransaction(ctx context.Context, id int64) error {
 	return wantOneRow(res, "transaction", id)
 }
 
+// SetCleared sets the cleared flag of the transaction with id and returns it,
+// or a NotFound error. On a transfer leg it changes only that leg.
+func (s *Store) SetCleared(ctx context.Context, id int64, cleared bool) (Transaction, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE transactions SET cleared = ? WHERE id = ?`, cleared, id)
+	if err != nil {
+		return Transaction{}, fmt.Errorf("update cleared: %w", err)
+	}
+	if err := wantOneRow(res, "transaction", id); err != nil {
+		return Transaction{}, err
+	}
+	return s.getTransaction(ctx, id)
+}
+
 // checkRefs returns an Invalid error, naming the field, if in refers to an
 // account or category that doesn't exist. A nil CategoryID is uncategorized
 // and always fine.
@@ -246,7 +260,7 @@ func (s *Store) checkRefs(ctx context.Context, in TransactionInput) error {
 	return nil
 }
 
-func (in TransactionInput) transaction(id int64) Transaction {
+func (in TransactionInput) transaction(id int64, cleared bool) Transaction {
 	return Transaction{
 		ID:          id,
 		AccountID:   in.AccountID,
@@ -255,5 +269,6 @@ func (in TransactionInput) transaction(id int64) Transaction {
 		Payee:       in.Payee,
 		AmountCents: in.AmountCents,
 		Note:        in.Note,
+		Cleared:     cleared,
 	}
 }

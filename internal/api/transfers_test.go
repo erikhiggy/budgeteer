@@ -181,3 +181,30 @@ func TestCreateTransferErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestTransferLegsAreUnclearedAndClearIndependently(t *testing.T) {
+	h := newTestServer(t, builtDist)
+	checking := createTestAccount(t, h, "Checking")
+	savings := createTestAccount(t, h, "Savings")
+
+	res, raw := doJSON(t, h, "POST", "/api/transfers", map[string]any{
+		"account_id": checking.ID, "other_account_id": savings.ID, "date": "2026-11-02", "payee": "Rainy day", "amount_cents": -20000,
+	})
+	wantStatus(t, res, raw, http.StatusCreated)
+	tr := decode[store.Transfer](t, raw)
+	if tr.Legs[0].Cleared || tr.Legs[1].Cleared {
+		t.Fatalf("legs = %+v, want both uncleared", tr.Legs)
+	}
+
+	res, raw = doJSON(t, h, "PUT", fmt.Sprintf("/api/transactions/%d/cleared", tr.Legs[0].ID), map[string]bool{"cleared": true})
+	wantStatus(t, res, raw, http.StatusOK)
+	if got := decode[store.Transaction](t, raw); !got.Cleared || got.TransferID == nil {
+		t.Errorf("cleared leg = %+v", got)
+	}
+	if list := listTestTransactions(t, h, checking.ID); !list[0].Cleared {
+		t.Errorf("checking leg = %+v, want cleared", list[0])
+	}
+	if list := listTestTransactions(t, h, savings.ID); list[0].Cleared {
+		t.Errorf("savings leg = %+v, want still uncleared", list[0])
+	}
+}

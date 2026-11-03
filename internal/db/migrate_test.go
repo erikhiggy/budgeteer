@@ -416,3 +416,44 @@ func TestCategoryGroupsMigration(t *testing.T) {
 		t.Errorf("group_id = %d after deleting the group, want NULL", group.Int64)
 	}
 }
+
+func TestClearedMigrationKeepsExistingData(t *testing.T) {
+	db := openTemp(t)
+	ctx := context.Background()
+
+	// A database from before cleared, with a transaction in it.
+	if err := Migrate(ctx, db, upTo(t, 7)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO accounts (name, type) VALUES ('Checking', 'checking')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO transactions (account_id, date, amount_cents) VALUES (1, '2026-11-01', -500)`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Migrate(ctx, db, upTo(t, 8)); err != nil {
+		t.Fatal(err)
+	}
+	var amount, cleared int
+	if err := db.QueryRow(`SELECT amount_cents, cleared FROM transactions`).Scan(&amount, &cleared); err != nil {
+		t.Fatal(err)
+	}
+	if amount != -500 || cleared != 0 {
+		t.Errorf("existing row = %d, cleared %d; want -500, uncleared", amount, cleared)
+	}
+
+	// New rows default to uncleared, and only 0 and 1 are allowed.
+	if _, err := db.Exec(`INSERT INTO transactions (account_id, date, amount_cents) VALUES (1, '2026-11-02', -100)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT cleared FROM transactions WHERE amount_cents = -100`).Scan(&cleared); err != nil {
+		t.Fatal(err)
+	}
+	if cleared != 0 {
+		t.Errorf("default cleared = %d, want 0", cleared)
+	}
+	if _, err := db.Exec(`UPDATE transactions SET cleared = 2`); err == nil {
+		t.Error("cleared = 2 was accepted, want the CHECK to reject it")
+	}
+}

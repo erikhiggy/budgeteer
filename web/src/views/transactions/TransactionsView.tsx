@@ -7,6 +7,7 @@ import {
 	useCreateTransfer,
 	useDeleteTransaction,
 	usePayees,
+	useSetCleared,
 	useTransactions,
 	useUpdateTransaction,
 } from '../../api/hooks';
@@ -144,6 +145,7 @@ const Ledger = ({ account, accounts, categories, payees }: LedgerProps) => {
 	const transactions = useTransactions(account.id);
 	const update = useUpdateTransaction();
 	const remove = useDeleteTransaction();
+	const clear = useSetCleared();
 
 	if (transactions.isPending) return <Notice>Loading transactions…</Notice>;
 	if (transactions.isError) {
@@ -160,6 +162,11 @@ const Ledger = ({ account, accounts, categories, payees }: LedgerProps) => {
 					Couldn’t delete the transaction: {remove.error.message}
 				</Notice>
 			)}
+			{clear.error && (
+				<Notice tone='error'>
+					Couldn’t change the cleared status: {clear.error.message}
+				</Notice>
+			)}
 			<TransactionTable
 				transactions={transactions.data}
 				categories={categories}
@@ -167,6 +174,7 @@ const Ledger = ({ account, accounts, categories, payees }: LedgerProps) => {
 				payees={payees}
 				onUpdate={(before, input) => update.mutateAsync({ before, input })}
 				onDelete={(tx) => remove.mutate(tx)}
+				onClear={(tx, cleared) => clear.mutate({ tx, cleared })}
 			/>
 		</>
 	);

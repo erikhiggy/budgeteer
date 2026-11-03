@@ -10,6 +10,8 @@ const account = (overrides: Partial<Account>): Account => {
 		name: 'Checking',
 		type: 'checking',
 		balance_cents: 0,
+		cleared_balance_cents: 0,
+		uncleared_balance_cents: 0,
 		...overrides,
 	};
 };

@@ -323,6 +323,7 @@ describe('EntryRow in edit mode', () => {
 		note: 'October',
 		transfer_id: null,
 		transfer_account_id: null,
+		cleared: false,
 	};
 
 	const setupEdit = (onSave = vi.fn().mockResolvedValue(undefined)) => {
@@ -382,8 +383,22 @@ describe('EntryRow in edit mode', () => {
 
 describe('EntryRow transfers', () => {
 	const others: Account[] = [
-		{ id: 9, name: 'Savings', type: 'savings', balance_cents: 0 },
-		{ id: 10, name: 'Visa', type: 'credit', balance_cents: 0 },
+		{
+			id: 9,
+			name: 'Savings',
+			type: 'savings',
+			balance_cents: 0,
+			cleared_balance_cents: 0,
+			uncleared_balance_cents: 0,
+		},
+		{
+			id: 10,
+			name: 'Visa',
+			type: 'credit',
+			balance_cents: 0,
+			cleared_balance_cents: 0,
+			uncleared_balance_cents: 0,
+		},
 	];
 
 	const setupTransfer = () => {
@@ -459,6 +474,7 @@ describe('EntryRow transfers', () => {
 			note: '',
 			transfer_id: 3,
 			transfer_account_id: 9,
+			cleared: false,
 		};
 		render(
 			<EntryRow
@@ -507,6 +523,7 @@ describe('EntryRow transfers', () => {
 					note: '',
 					transfer_id: null,
 					transfer_account_id: null,
+					cleared: false,
 				}}
 			/>,
 		);

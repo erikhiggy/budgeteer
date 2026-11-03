@@ -148,7 +148,7 @@ func TestUpdateAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != (Account{ID: a.ID, Name: "Checking", Type: "checking", BalanceCents: 1000}) {
+	if got != (Account{ID: a.ID, Name: "Checking", Type: "checking", BalanceCents: 1000, ClearedBalanceCents: 1000, UnclearedBalanceCents: 0}) {
 		t.Errorf("updated = %+v", got)
 	}
 
@@ -205,4 +205,102 @@ func TestDeleteAccount(t *testing.T) {
 	}
 
 	wantKind(t, s.DeleteAccount(ctx, empty.ID), NotFound)
+}
+
+func TestAccountClearedAndUnclearedBalances(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+	a, err := s.CreateAccount(ctx, AccountInput{Name: "Checking", Type: "checking"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CreateAccount(ctx, AccountInput{Name: "Savings", Type: "savings"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var ids []int64
+	for _, cents := range []int64{100000, -2550, -999} {
+		tx, err := s.CreateTransaction(ctx, TransactionInput{AccountID: a.ID, Date: "2026-11-01", AmountCents: cents})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, tx.ID)
+	}
+
+	check := func(name string, got Account, balance, cleared, uncleared int64) {
+		t.Helper()
+		if got.BalanceCents != balance || got.ClearedBalanceCents != cleared || got.UnclearedBalanceCents != uncleared {
+			t.Errorf("%s: balance %d, cleared %d, uncleared %d; want %d, %d, %d",
+				name, got.BalanceCents, got.ClearedBalanceCents, got.UnclearedBalanceCents, balance, cleared, uncleared)
+		}
+	}
+	find := func() (Account, Account) {
+		t.Helper()
+		accounts, err := s.ListAccounts(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Sorted by name: Checking, Savings.
+		return accounts[0], accounts[1]
+	}
+
+	// Everything starts uncleared.
+	checking, savings := find()
+	check("all uncleared", checking, 96451, 0, 96451)
+	check("no transactions", savings, 0, 0, 0)
+
+	if _, err := s.SetCleared(ctx, ids[0], true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetCleared(ctx, ids[1], true); err != nil {
+		t.Fatal(err)
+	}
+	checking, _ = find()
+	check("two cleared", checking, 96451, 97450, -999)
+
+	// getAccount, which backs the PATCH response, agrees with the list.
+	name := "Checking"
+	updated, err := s.UpdateAccount(ctx, a.ID, AccountUpdate{Name: &name})
+	if err != nil {
+		t.Fatal(err)
+	}
+	check("UpdateAccount", updated, 96451, 97450, -999)
+
+	if _, err := s.SetCleared(ctx, ids[1], false); err != nil {
+		t.Fatal(err)
+	}
+	checking, _ = find()
+	check("one unclearing", checking, 96451, 100000, -3549)
+}
+
+func TestOpeningBalanceIsCleared(t *testing.T) {
+	s, _ := newTestStore(t)
+	ctx := context.Background()
+	a, err := s.CreateAccount(ctx, AccountInput{Name: "Visa", Type: "credit", OpeningBalanceCents: -12345, OpeningBalanceDate: "2026-11-01"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.BalanceCents != -12345 || a.ClearedBalanceCents != -12345 || a.UnclearedBalanceCents != 0 {
+		t.Errorf("created = %+v, want it all cleared", a)
+	}
+
+	txs, err := s.ListTransactions(ctx, TransactionFilter{AccountID: a.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(txs) != 1 || !txs[0].Cleared {
+		t.Errorf("transactions = %+v, want the opening balance cleared", txs)
+	}
+
+	// A later purchase is uncleared, so it only moves the uncleared balance.
+	if _, err := s.CreateTransaction(ctx, TransactionInput{AccountID: a.ID, Date: "2026-11-02", AmountCents: -1000}); err != nil {
+		t.Fatal(err)
+	}
+	accounts, err := s.ListAccounts(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := accounts[0]; got.BalanceCents != -13345 || got.ClearedBalanceCents != -12345 || got.UnclearedBalanceCents != -1000 {
+		t.Errorf("account = %+v", got)
+	}
 }

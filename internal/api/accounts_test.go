@@ -136,3 +136,31 @@ func TestDeleteAccount(t *testing.T) {
 	wantNoContent(t, h, "DELETE", fmt.Sprintf("/api/accounts/%d", empty.ID))
 	wantError(t, h, "DELETE", fmt.Sprintf("/api/accounts/%d", empty.ID), nil, http.StatusNotFound)
 }
+
+func TestAccountClearedBalancesWireFormat(t *testing.T) {
+	h := newTestServer(t, builtDist)
+	res, raw := doJSON(t, h, "POST", "/api/accounts", map[string]any{"name": "Visa", "type": "credit", "opening_balance_cents": -50000})
+	wantStatus(t, res, raw, http.StatusCreated)
+
+	// The opening balance is cleared, and the numbers are on the wire.
+	body := decode[map[string]any](t, raw)
+	if body["balance_cents"] != float64(-50000) || body["cleared_balance_cents"] != float64(-50000) || body["uncleared_balance_cents"] != float64(0) {
+		t.Errorf("created = %v", body)
+	}
+	a := decode[store.Account](t, raw)
+
+	// An uncleared purchase moves working and uncleared, not cleared.
+	createTestTransaction(t, h, map[string]any{"account_id": a.ID, "date": "2026-11-02", "amount_cents": -1500})
+	res, raw = doJSON(t, h, "GET", "/api/accounts", nil)
+	wantStatus(t, res, raw, http.StatusOK)
+	if got := decode[[]store.Account](t, raw)[0]; got.BalanceCents != -51500 || got.ClearedBalanceCents != -50000 || got.UnclearedBalanceCents != -1500 {
+		t.Errorf("listed = %+v", got)
+	}
+
+	// The PATCH response carries them too.
+	res, raw = doJSON(t, h, "PATCH", fmt.Sprintf("/api/accounts/%d", a.ID), map[string]string{"name": "Visa card"})
+	wantStatus(t, res, raw, http.StatusOK)
+	if got := decode[store.Account](t, raw); got.BalanceCents != -51500 || got.ClearedBalanceCents != -50000 || got.UnclearedBalanceCents != -1500 {
+		t.Errorf("patched = %+v", got)
+	}
+}
