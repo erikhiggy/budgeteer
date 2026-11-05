@@ -1,10 +1,13 @@
 /* Design tokens. Component CSS modules use only these variables; dark mode
-   (later) redefines them under prefers-color-scheme. */
+   redefines them under prefers-color-scheme. */
 :root {
+	color-scheme: light dark;
+
 	/* Neutrals */
 	--color-bg: #f7f7f5;
 	--color-surface: #ffffff;
 	--color-border: #e2e2dd;
+	--color-border-strong: #8f8f88;
 	--color-text: #1d1d1b;
 	--color-text-muted: #6b6b66;
 
@@ -43,4 +46,33 @@
 	--radius-sm: 4px;
 	--radius-md: 8px;
 	--shadow-popover: 0 4px 12px rgb(0 0 0 / 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		/* Neutrals */
+		--color-bg: #151513;
+		--color-surface: #1e1e1c;
+		--color-border: #2e2e2a;
+		--color-border-strong: #6e6e67;
+		--color-text: #ecece8;
+		--color-text-muted: #a0a09a;
+
+		/* Brand and semantics: lighter than their light-mode values so they
+		   keep their contrast on the dark surface. */
+		--color-accent: #5fb585;
+		--color-accent-contrast: #0f1a14;
+		--color-outflow: #ecece8;
+		--color-inflow: #6cc28f;
+		--color-over-cap: #e5705d;
+		--color-invalid: #e5705d;
+		--color-focus: #6aa8e0;
+
+		/* Charts */
+		--color-chart-1: #5b9ee8;
+		--color-chart-2: #f08a5d;
+		--color-chart-grid: #2c2c28;
+
+		--shadow-popover: 0 4px 12px rgb(0 0 0 / 0.4);
+	}
 }
