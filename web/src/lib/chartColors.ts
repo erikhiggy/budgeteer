@@ -1,5 +1,5 @@
 // Chart colors by role. The values are tokens in styles/tokens.css, so dark
-// mode (later) only has to redefine the tokens. SVG fill and stroke accept
+// mode only has to redefine the tokens. SVG fill and stroke accept
 // var() like any other CSS color.
 
 export const chartColors = {
