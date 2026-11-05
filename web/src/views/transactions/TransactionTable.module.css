@@ -35,29 +35,66 @@
 }
 
 .cleared {
-	width: 56px;
+	width: 48px;
 	text-align: center !important;
 }
 
-/* The "c": an outline until the transaction clears, then filled. */
-.clearToggle {
-	width: 26px;
-	padding: 0;
-	border-color: var(--color-border);
-	background: transparent;
-	color: var(--color-text-muted);
+.headerIcon {
+	vertical-align: -2px;
 }
 
+/* A quiet ring that fills with a check once the transaction clears. The ring
+   reveals its accent on row hover or keyboard focus. */
+.clearToggle {
+	display: inline-grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: 0;
+	border-radius: 50%;
+	background: transparent;
+	color: transparent;
+}
+
+.ring {
+	display: grid;
+	place-items: center;
+	width: 18px;
+	height: 18px;
+	border: 1.5px solid var(--color-border-strong);
+	border-radius: 50%;
+	transition:
+		background 120ms,
+		border-color 120ms,
+		color 120ms,
+		transform 120ms;
+}
+
+tr:hover .clearToggle:not(:disabled),
 .clearToggle:hover:not(:disabled) {
-	border-color: var(--color-accent);
 	color: var(--color-accent);
 }
 
-.clearToggle[aria-pressed='true'],
-.clearToggle[aria-pressed='true']:hover:not(:disabled) {
+tr:hover .clearToggle:not(:disabled) .ring,
+.clearToggle:hover:not(:disabled) .ring {
+	border-color: var(--color-accent);
+}
+
+.clearToggle[aria-pressed='true'] .ring {
 	border-color: var(--color-accent);
 	background: var(--color-accent);
 	color: var(--color-accent-contrast);
+}
+
+.clearToggle:active:not(:disabled) .ring {
+	transform: scale(0.88);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.ring {
+		transition: none;
+	}
 }
 
 .amount {

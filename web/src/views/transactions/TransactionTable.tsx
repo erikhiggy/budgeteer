@@ -57,7 +57,7 @@ export const TransactionTable = ({
 			<thead>
 				<tr>
 					<th className={styles.cleared}>
-						<span aria-hidden='true'>C</span>
+						<Check className={styles.headerIcon} />
 						<span className={styles.visuallyHidden}>Cleared</span>
 					</th>
 					<th className={styles.date}>Date</th>
@@ -102,12 +102,15 @@ export const TransactionTable = ({
 							<td className={styles.cleared}>
 								<button
 									type='button'
-									className={cx(buttons.small, styles.clearToggle)}
+									className={styles.clearToggle}
 									aria-pressed={tx.cleared}
 									aria-label={`Cleared ${describe(tx)}`}
+									title={tx.cleared ? 'Mark uncleared' : 'Mark cleared'}
 									onClick={() => onClear(tx, !tx.cleared)}
 								>
-									c
+									<span className={styles.ring}>
+										<Check />
+									</span>
 								</button>
 							</td>
 							<td className={styles.date}>{formatDate(tx.date)}</td>
@@ -143,6 +146,28 @@ export const TransactionTable = ({
 				)}
 			</tbody>
 		</table>
+	);
+};
+
+/** A check mark that takes its color from the surrounding text. */
+const Check = ({ className }: { className?: string }) => {
+	return (
+		<svg
+			viewBox='0 0 16 16'
+			width='12'
+			height='12'
+			aria-hidden='true'
+			className={className}
+		>
+			<path
+				d='M3.5 8.5l3 3 6-7'
+				fill='none'
+				stroke='currentColor'
+				strokeWidth='2'
+				strokeLinecap='round'
+				strokeLinejoin='round'
+			/>
+		</svg>
 	);
 };
 
