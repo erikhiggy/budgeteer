@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import type {
 	Account,
 	Category,
@@ -29,6 +29,9 @@ type Props = {
 
 const COLUMNS = 7;
 
+type SortKey = 'cleared' | 'date' | 'payee' | 'category' | 'note' | 'amount';
+type Sort = { key: SortKey; dir: 'asc' | 'desc' };
+
 export const TransactionTable = ({
 	transactions,
 	categories,
@@ -51,20 +54,91 @@ export const TransactionTable = ({
 	};
 	// One row at a time is open for editing.
 	const [editingId, setEditingId] = useState<number | null>(null);
+	// null keeps the order the transactions arrived in.
+	const [sort, setSort] = useState<Sort | null>(null);
+
+	// Clicking a header cycles ascending, descending, then back to unsorted.
+	const toggleSort = (key: SortKey) => {
+		setSort((prev) => {
+			if (prev?.key !== key) return { key, dir: 'asc' };
+			return prev.dir === 'asc' ? { key, dir: 'desc' } : null;
+		});
+	};
+
+	const sorted = useMemo(() => {
+		if (!sort) return transactions;
+		const value = (tx: Transaction): string | number => {
+			switch (sort.key) {
+				case 'cleared':
+					return tx.cleared ? 1 : 0;
+				case 'date':
+					return tx.date;
+				case 'payee':
+					return tx.payee;
+				case 'category':
+					return categoryCell(tx);
+				case 'note':
+					return tx.note;
+				case 'amount':
+					return tx.amount_cents;
+			}
+		};
+		const sign = sort.dir === 'asc' ? 1 : -1;
+		// Array.prototype.sort is stable, so ties keep their incoming order.
+		return [...transactions].sort((a, b) => {
+			const x = value(a);
+			const y = value(b);
+			if (typeof x === 'number' && typeof y === 'number') {
+				return (x - y) * sign;
+			}
+			return (
+				String(x).localeCompare(String(y), undefined, { numeric: true }) * sign
+			);
+		});
+		// categoryCell closes over the name maps, which derive from these props.
+	}, [transactions, categories, accounts, sort]);
+
+	const header = (key: SortKey, label: ReactNode, className?: string) => (
+		<th
+			className={className}
+			aria-sort={
+				sort?.key !== key
+					? undefined
+					: sort.dir === 'asc'
+						? 'ascending'
+						: 'descending'
+			}
+		>
+			<button
+				type='button'
+				className={styles.sortButton}
+				onClick={() => toggleSort(key)}
+			>
+				{label}
+				<span className={styles.sortArrow} aria-hidden='true'>
+					{sort?.key === key ? (sort.dir === 'asc' ? '▲' : '▼') : ''}
+				</span>
+			</button>
+		</th>
+	);
 
 	return (
 		<table className={styles.table}>
 			<thead>
 				<tr>
-					<th className={styles.cleared}>
-						<Check className={styles.headerIcon} />
-						<span className={styles.visuallyHidden}>Cleared</span>
-					</th>
-					<th className={styles.date}>Date</th>
-					<th>Payee</th>
-					<th>Category</th>
-					<th>Note</th>
-					<th className={styles.amount}>Amount</th>
+					{header(
+						'cleared',
+						<>
+							<Check className={styles.headerIcon} />
+							<span className={styles.visuallyHidden}>Cleared</span>
+						</>,
+						styles.cleared,
+					)}
+					{header('date', 'Date', styles.date)}
+					{header('payee', 'Payee')}
+					{header('category', 'Category')}
+					{header('note', 'Note')}
+					{header('amount', 'Amount', styles.amount)}
 					<th className={styles.actions}>
 						<span className={styles.visuallyHidden}>Actions</span>
 					</th>
@@ -78,7 +152,7 @@ export const TransactionTable = ({
 						</td>
 					</tr>
 				)}
-				{transactions.map((tx) =>
+				{sorted.map((tx) =>
 					tx.id === editingId ? (
 						<tr key={tx.id} className={styles.editing}>
 							<td colSpan={COLUMNS}>
