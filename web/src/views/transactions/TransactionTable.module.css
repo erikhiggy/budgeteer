@@ -29,6 +29,30 @@
 	background: var(--color-bg);
 }
 
+/* Header labels are buttons; they should read as header text. */
+.sortButton {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-1);
+	padding: 0;
+	border: 0;
+	background: none;
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
+}
+
+.sortButton:hover {
+	color: var(--color-text);
+}
+
+/* Fixed width so the label doesn't shift when the arrow appears. */
+.sortArrow {
+	display: inline-block;
+	width: 1em;
+	font-size: 0.7em;
+}
+
 .date {
 	width: 130px;
 	white-space: nowrap;
